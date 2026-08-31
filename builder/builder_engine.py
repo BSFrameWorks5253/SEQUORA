@@ -226,9 +226,80 @@ def package_zip_release(version: str, log_callback=None) -> Path:
     return zip_path
 
 
-def publish_github_release(version: str, zip_path: Path = None, notes: str = "", token: str = "", repo_slug: str = "BSFrameWorks5253/SEQUORA", branch: str = "main", log_callback=None) -> bool:
+def build_installer_wizard_exe(version: str, zip_path: Path, log_callback=None) -> Path:
+    """Compiles the Setup Wizard into a single standalone Setup.exe containing the entire app."""
+    def log(msg):
+        if log_callback:
+            log_callback(msg)
+        else:
+            print(msg)
+
+    log(f"[*] Compiling Standalone Setup Wizard for v{version}...")
+    setup_script = PROJECT_ROOT / "installer" / "setup_wizard.py"
+    if not setup_script.exists():
+        log(f"[!] Setup script not found: {setup_script}")
+        return None
+
+    installer_output_name = f"SEQUORA_Studio_Setup_v{version}"
+    build_work = DIST_DIR / "build_setup_temp"
+
+    # Temporary payload path for embedding
+    payload_dest = PROJECT_ROOT / "installer" / "payload.zip"
+    if zip_path and zip_path.exists():
+        shutil.copy(str(zip_path), str(payload_dest))
+
+    cmd = [
+        sys.executable, "-m", "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onefile",
+        "--windowed",
+        "--name", installer_output_name,
+        f"--icon={str(ICON_ICO)}",
+        f"--distpath={str(RELEASES_DIR)}",
+        f"--workpath={str(build_work)}",
+        f"--specpath={str(DIST_DIR)}",
+        f"--add-data={str(payload_dest)}{os.pathsep}.",
+        f"--add-data={str(ICON_ICO)}{os.pathsep}assets",
+        "--hidden-import=PySide6.QtCore",
+        "--hidden-import=PySide6.QtGui",
+        "--hidden-import=PySide6.QtWidgets",
+        str(setup_script)
+    ]
+
+    log("[*] Building standalone Setup installer (.exe)...")
+    p = subprocess.Popen(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
+    )
+    for line in p.stdout:
+        log(line.rstrip())
+    p.wait()
+
+    # Clean temporary payload file
+    if payload_dest.exists():
+        try:
+            payload_dest.unlink()
+        except Exception:
+            pass
+
+    out_installer = RELEASES_DIR / f"{installer_output_name}.exe"
+    if out_installer.exists():
+        log(f"[OK] Standalone Setup Installer compiled: {out_installer.name} ({out_installer.stat().st_size / (1024*1024):.1f} MB)")
+        return out_installer
+    else:
+        log("[!] Failed to generate installer exe.")
+        return None
+
+
+def publish_github_release(version: str, zip_path: Path = None, installer_exe: Path = None, notes: str = "", token: str = "", repo_slug: str = "BSFrameWorks5253/SEQUORA", branch: str = "main", log_callback=None) -> bool:
     """
-    Pushes git commits/tags to GitHub and uploads release asset ZIP via GitHub REST API.
+    Pushes git commits/tags to GitHub and uploads release asset ZIP and Setup.exe via GitHub REST API.
     """
     import urllib.request
     import urllib.error
@@ -319,26 +390,33 @@ def publish_github_release(version: str, zip_path: Path = None, notes: str = "",
         html_url = res_json.get("html_url", "")
         log(f"[OK] GitHub Release created: {html_url}")
 
-        # 3. Upload ZIP Asset if provided
+        # 3. Upload Binary Assets (Setup.exe & ZIP archive)
+        assets_to_upload = []
+        if installer_exe and installer_exe.exists():
+            assets_to_upload.append(installer_exe)
         if zip_path and zip_path.exists():
-            clean_upload_url = upload_url_tpl.split("{")[0] + f"?name={zip_path.name}"
-            log(f"[*] Uploading release binary asset: {zip_path.name} ({os.path.getsize(zip_path)/(1024*1024):.1f} MB)...")
-            
-            with open(zip_path, "rb") as zf:
-                zip_bytes = zf.read()
+            assets_to_upload.append(zip_path)
 
+        for asset in assets_to_upload:
+            clean_upload_url = upload_url_tpl.split("{")[0] + f"?name={asset.name}"
+            log(f"[*] Uploading release asset: {asset.name} ({os.path.getsize(asset)/(1024*1024):.1f} MB)...")
+            
+            with open(asset, "rb") as af:
+                asset_bytes = af.read()
+
+            content_type = "application/x-msdownload" if asset.name.endswith(".exe") else "application/zip"
             upload_headers = {
                 "Authorization": f"token {token}",
-                "Content-Type": "application/zip",
-                "Content-Length": str(len(zip_bytes)),
+                "Content-Type": content_type,
+                "Content-Length": str(len(asset_bytes)),
                 "User-Agent": "SEQUORA-Studio-Publisher/3.0"
             }
-            up_req = urllib.request.Request(clean_upload_url, data=zip_bytes, headers=upload_headers, method="POST")
-            with urllib.request.urlopen(up_req, timeout=120) as up_resp:
+            up_req = urllib.request.Request(clean_upload_url, data=asset_bytes, headers=upload_headers, method="POST")
+            with urllib.request.urlopen(up_req, timeout=600) as up_resp:
                 up_json = json.loads(up_resp.read().decode("utf-8"))
                 download_url = up_json.get("browser_download_url", "")
-                log(f"[OK] Asset uploaded successfully!")
-                log(f"[OK] Direct Client Download URL: {download_url}")
+                log(f"[OK] {asset.name} uploaded successfully!")
+                log(f"[OK] Download URL: {download_url}")
 
         return True
 

@@ -35,10 +35,11 @@ class BuildWorkerThread(QThread):
     progress_signal = Signal(int)
     finished_signal = Signal(bool, str)
 
-    def __init__(self, build_exe, make_zip, do_git, bump_mode, custom_ver, commit_msg, remote, branch, repo_slug, token):
+    def __init__(self, build_exe, make_zip, build_installer, do_git, bump_mode, custom_ver, commit_msg, remote, branch, repo_slug, token):
         super().__init__()
         self.build_exe = build_exe
         self.make_zip = make_zip
+        self.build_installer = build_installer
         self.do_git = do_git
         self.bump_mode = bump_mode
         self.custom_ver = custom_ver
@@ -61,7 +62,7 @@ class BuildWorkerThread(QThread):
 
             self.progress_signal.emit(25)
 
-            # 2. Build EXE
+            # 2. Build Standalone App Folder EXE
             if self.build_exe:
                 self.log_signal.emit("[*] Compiling Standalone Windows Executable...")
                 ok = builder_engine.build_pyinstaller_exe(new_version, log_callback=self.log_signal.emit)
@@ -69,24 +70,33 @@ class BuildWorkerThread(QThread):
                     self.finished_signal.emit(False, "PyInstaller compilation failed.")
                     return
 
-            self.progress_signal.emit(65)
+            self.progress_signal.emit(55)
 
             # 3. Package ZIP
             zip_path = None
-            if self.make_zip:
+            if self.make_zip or self.build_installer:
                 self.log_signal.emit("[*] Packaging ZIP distribution & manifest...")
                 zip_path = builder_engine.package_zip_release(new_version, log_callback=self.log_signal.emit)
                 if not zip_path:
                     self.log_signal.emit("[!] Warning: ZIP packaging skipped (dist folder missing).")
 
-            self.progress_signal.emit(85)
+            self.progress_signal.emit(75)
 
-            # 4. Git Push & GitHub Release Publishing
+            # 4. Build Standalone Setup.exe Installer
+            installer_exe = None
+            if self.build_installer and zip_path:
+                self.log_signal.emit("[*] Compiling Single-File Setup Wizard Installer (Setup.exe)...")
+                installer_exe = builder_engine.build_installer_wizard_exe(new_version, zip_path, log_callback=self.log_signal.emit)
+
+            self.progress_signal.emit(88)
+
+            # 5. Git Push & GitHub Release Publishing
             if self.do_git:
                 self.log_signal.emit(f"[*] Publishing release v{new_version} to GitHub ({self.repo_slug})...")
                 builder_engine.publish_github_release(
                     version=new_version,
                     zip_path=zip_path,
+                    installer_exe=installer_exe,
                     notes=self.commit_msg,
                     token=self.token,
                     repo_slug=self.repo_slug,
@@ -275,11 +285,15 @@ class BuilderMainWindow(QMainWindow):
         opt_layout.setSpacing(10)
 
         row1 = QHBoxLayout()
-        self.chk_build_exe = QCheckBox("Compile PyInstaller Standalone Windows Executable (.exe)")
+        self.chk_build_exe = QCheckBox("Compile Standalone Windows Executable (.exe)")
         self.chk_build_exe.setChecked(True)
         row1.addWidget(self.chk_build_exe)
 
-        self.chk_make_zip = QCheckBox("Package ZIP Release & update manifest (version.json)")
+        self.chk_build_installer = QCheckBox("Build Single-File Setup Wizard Installer (Setup.exe)")
+        self.chk_build_installer.setChecked(True)
+        row1.addWidget(self.chk_build_installer)
+
+        self.chk_make_zip = QCheckBox("Package ZIP Release")
         self.chk_make_zip.setChecked(True)
         row1.addWidget(self.chk_make_zip)
         row1.addStretch()
@@ -471,6 +485,7 @@ class BuilderMainWindow(QMainWindow):
         self.worker = BuildWorkerThread(
             build_exe=self.chk_build_exe.isChecked(),
             make_zip=self.chk_make_zip.isChecked(),
+            build_installer=self.chk_build_installer.isChecked(),
             do_git=self.chk_git_push.isChecked(),
             bump_mode=bump_mode,
             custom_ver=custom_ver,
