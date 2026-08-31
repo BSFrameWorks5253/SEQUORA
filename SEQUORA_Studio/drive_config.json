@@ -1,0 +1,4 @@
+{
+  "mainDataUrl": "https://accounts.google.com/v3/signin/identifier?continue=https://drive.google.com/drive/my-drive&followup=https://drive.google.com/drive/my-drive&osid=1&passive=1209600&service=wise&flowName=GlifWebSignIn&flowEntry=ServiceLogin&dsh=S1008977339:1788195591079673",
+  "thumbnailsUrl": "https://drive.google.com/drive/my-drive"
+}

@@ -1,0 +1,33 @@
+# Git Ignore for SEQUORA Studio
+
+# Compiled Binaries & Release Archives (Upload via GitHub Releases API, not git commit)
+dist/
+build/
+*.exe
+*.zip
+*.tar.gz
+
+# Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Legacy electron node_modules
+electron/node_modules/
+
+# Secrets & Config
+.github_token
+*.token
+.env
