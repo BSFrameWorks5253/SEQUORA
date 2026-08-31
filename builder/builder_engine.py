@@ -254,19 +254,25 @@ def publish_github_release(version: str, zip_path: Path = None, notes: str = "",
             subprocess.run(["git", "init"], cwd=str(PROJECT_ROOT), check=True)
             subprocess.run(["git", "branch", "-M", branch], cwd=str(PROJECT_ROOT), check=True)
 
+        subprocess.run(["git", "config", "user.name", "BSFrameWorks5253"], cwd=str(PROJECT_ROOT), capture_output=True)
+        subprocess.run(["git", "config", "user.email", "bsframeworks5253@gmail.com"], cwd=str(PROJECT_ROOT), capture_output=True)
+
         log("[*] Staging files (git add .)...")
         subprocess.run(["git", "add", "."], cwd=str(PROJECT_ROOT), check=True)
 
         commit_msg = f"Release {tag_name} — SEQUORA Studio Production Build"
         subprocess.run(["git", "commit", "-m", commit_msg], cwd=str(PROJECT_ROOT), capture_output=True)
 
-        subprocess.run(["git", "tag", "-a", tag_name, "-m", f"SEQUORA Studio {tag_name}"], cwd=str(PROJECT_ROOT), capture_output=True)
+        subprocess.run(["git", "tag", "-a", tag_name, "-m", f"SEQUORA Studio {tag_name}", "-f"], cwd=str(PROJECT_ROOT), capture_output=True)
 
         if token:
             authenticated_url = f"https://{token}@github.com/{repo_slug}.git"
             log(f"[*] Setting authenticated remote for {repo_slug}...")
-            subprocess.run(["git", "remote", "remove", "origin"], cwd=str(PROJECT_ROOT), capture_output=True)
-            subprocess.run(["git", "remote", "add", "origin", authenticated_url], cwd=str(PROJECT_ROOT), capture_output=True)
+            remotes = subprocess.run(["git", "remote"], cwd=str(PROJECT_ROOT), capture_output=True, text=True).stdout
+            if "origin" in remotes:
+                subprocess.run(["git", "remote", "set-url", "origin", authenticated_url], cwd=str(PROJECT_ROOT), capture_output=True)
+            else:
+                subprocess.run(["git", "remote", "add", "origin", authenticated_url], cwd=str(PROJECT_ROOT), capture_output=True)
 
             log(f"[*] Pushing commits and tags to GitHub ({branch})...")
             push_res = subprocess.run(["git", "push", "-u", "origin", branch, "--tags", "--force"], cwd=str(PROJECT_ROOT), capture_output=True, text=True)
