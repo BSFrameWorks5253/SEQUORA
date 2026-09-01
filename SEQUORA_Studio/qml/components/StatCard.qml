@@ -1,11 +1,11 @@
 // ============================================================
 // qml/components/StatCard.qml
-// Ultra-Premium Glassmorphic Stat Card with Animated Counter
+// Ultra-Premium Glassmorphic Stat Card with Spring Hover & Ambient Glow
 // ============================================================
 import QtQuick
 import QtQuick.Layouts
 
-Rectangle {
+Item {
     id: root
     required property var theme
     property string label:  ""
@@ -13,109 +13,99 @@ Rectangle {
     property string accent: "purple"
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 88
-    Layout.minimumHeight: 88
+    Layout.preferredHeight: 90
+    Layout.minimumHeight: 90
     implicitWidth: 150
-    implicitHeight: 88
+    implicitHeight: 90
 
-    radius: 16
-    color: cardHover.containsMouse ? theme.surface : theme.surfaceGlass
-    border.color: cardHover.containsMouse
-                  ? (accent === "green"  ? theme.success
-                   : accent === "red"    ? theme.danger
-                   : accent === "orange" ? theme.warning
-                   : accent === "blue"   ? theme.info
-                   : theme.accent)
-                  : theme.border_
-    border.width: cardHover.containsMouse ? 1.5 : 1
+    readonly property color accentCol: {
+        switch (root.accent) {
+            case "green":   return root.theme ? root.theme.success : "#10B981"
+            case "red":     return root.theme ? root.theme.danger : "#F43F5E"
+            case "orange":
+            case "amber":   return root.theme ? root.theme.warning : "#F59E0B"
+            case "blue":
+            case "cyan":    return root.theme ? root.theme.cyan : "#06B6D4"
+            case "magenta": return root.theme ? root.theme.camB : "#EC4899"
+            default:        return root.theme ? root.theme.accent : "#8B5CF6"
+        }
+    }
 
-    scale: cardHover.containsMouse ? 1.03 : 1.0
-
-    Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
-    Behavior on color { ColorAnimation { duration: 180 } }
-    Behavior on border.color { ColorAnimation { duration: 180 } }
-    Behavior on border.width { NumberAnimation { duration: 180 } }
-
-    // Gradient accent bar at top
+    // ── Outer Ambient Glow Aura ───────────────────────────────────────────────
     Rectangle {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: 5
-        anchors.rightMargin: 5
-        height: 3
-        radius: 1.5
-        gradient: Gradient {
-            orientation: Gradient.Horizontal
-            GradientStop {
-                position: 0.0
-                color: accent === "red"    ? theme.danger
-                     : accent === "green"  ? theme.success
-                     : accent === "blue"   ? theme.info
-                     : accent === "orange" ? theme.warning
-                     : theme.accent
-            }
-            GradientStop {
-                position: 1.0
-                color: accent === "red"    ? "#FF6B6B"
-                     : accent === "green"  ? "#34D399"
-                     : accent === "blue"   ? "#60A5FA"
-                     : accent === "orange" ? "#FCD34D"
-                     : theme.accentHover
-            }
-        }
-        opacity: cardHover.containsMouse ? 1.0 : 0.6
-        Behavior on opacity { NumberAnimation { duration: 180 } }
+        anchors.fill: cardBody
+        anchors.margins: -4
+        radius: 20
+        color: root.accentCol
+        opacity: cardHover.containsMouse ? 0.25 : 0.0
+        z: 0
+
+        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
     }
 
-    // Subtle inner glow when hovered
+    // ── Card Main Body ────────────────────────────────────────────────────────
     Rectangle {
+        id: cardBody
         anchors.fill: parent
-        radius: parent.radius
-        color: "transparent"
-        border.color: accent === "red"    ? theme.danger
-                    : accent === "green"  ? theme.success
-                    : accent === "blue"   ? theme.info
-                    : accent === "orange" ? theme.warning
-                    : theme.accent
-        border.width: 1
-        opacity: cardHover.containsMouse ? 0.12 : 0
-        Behavior on opacity { NumberAnimation { duration: 200 } }
-    }
+        radius: 16
+        z: 1
+        color: cardHover.containsMouse ? root.theme.surfaceElevated : root.theme.surfaceGlass
+        border.color: cardHover.containsMouse ? root.accentCol : root.theme.border_
+        border.width: cardHover.containsMouse ? 1.5 : 1
 
-    ColumnLayout {
-        anchors.centerIn: parent
-        spacing: 4
+        scale: cardHover.containsMouse ? 1.03 : 1.0
+        y: cardHover.containsMouse ? -3 : 0
 
-        Text {
-            text: String(root.value)
-            font.pixelSize: 26
-            font.weight: Font.Black
-            color: accent === "red"    ? theme.danger
-                 : accent === "green"  ? theme.success
-                 : accent === "blue"   ? theme.info
-                 : accent === "orange" ? theme.warning
-                 : theme.accent
-            Layout.alignment: Qt.AlignHCenter
+        Behavior on scale { NumberAnimation { duration: 200; easing.type: Easing.OutBack; easing.overshoot: 1.5 } }
+        Behavior on y { NumberAnimation { duration: 200; easing.type: Easing.OutBack } }
+        Behavior on color { ColorAnimation { duration: 180 } }
+        Behavior on border.color { ColorAnimation { duration: 180 } }
+        Behavior on border.width { NumberAnimation { duration: 180 } }
 
-            Behavior on text { NumberAnimation { duration: 0 } }
+        // Gradient accent bar at top
+        Rectangle {
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: 6
+            anchors.rightMargin: 6
+            height: 3
+            radius: 1.5
+            color: root.accentCol
+            opacity: cardHover.containsMouse ? 1.0 : 0.7
+
+            Behavior on opacity { NumberAnimation { duration: 180 } }
         }
 
-        Text {
-            text: root.label
-            font.pixelSize: 10
-            color: theme.textMuted
-            font.weight: Font.Bold
-            font.letterSpacing: 0.5
-            Layout.alignment: Qt.AlignHCenter
-            elide: Text.ElideRight
-        }
-    }
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 4
 
-    MouseArea {
-        id: cardHover
-        anchors.fill: parent
-        hoverEnabled: true
-        cursorShape: Qt.PointingHandCursor
+            Text {
+                text: String(root.value)
+                font.pixelSize: 26
+                font.weight: Font.Black
+                font.letterSpacing: -0.5
+                color: root.accentCol
+                Layout.alignment: Qt.AlignHCenter
+            }
+
+            Text {
+                text: root.label
+                font.pixelSize: 10
+                color: root.theme.textMuted
+                font.weight: Font.Bold
+                font.letterSpacing: 0.6
+                Layout.alignment: Qt.AlignHCenter
+                elide: Text.ElideRight
+            }
+        }
+
+        MouseArea {
+            id: cardHover
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+        }
     }
 }

@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 title SEQUORA Studio — Standalone EXE Builder ^& Release Engine
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo ===============================================================================
 echo  SEQUORA Studio — Standalone EXE Builder ^& GitHub Release Engine

@@ -44,44 +44,47 @@ Item {
         target: root.engine
         ignoreUnknownSignals: true
 
-        function onScanStarted() {
-            root.isScanning = true
-            root.progressVal = 0.0
-            root.progressMsg = "Indexing master and remaining photos..."
+        function onScanningChanged() {
+            if (root.engine) root.isScanning = root.engine.scanning
         }
-        function onScanProgress(current, total, filename) {
-            root.progressVal = total > 0 ? (current / total) : 0.0
-            root.currentFileMsg = filename
+        function onRenamingChanged() {
+            if (root.engine) root.isRenaming = root.engine.renaming
         }
-        function onScanFinished(res, st) {
-            root.isScanning = false
+        function onScanCompleted(res) {
             root.hasScanned = true
-            root.results = res || []
-            root.stats = st || { total: 0, matched: 0, unmatched: 0, duplicates: 0, errors: 0 }
-            toast.show("Scan complete: " + (st ? st.matched : 0) + " matched photos found.", "success")
+            root.results = res.all_items || res.items || []
+            root.stats = {
+                total: res.totalRemaining || (root.results ? root.results.length : 0),
+                matched: res.totalUsed || 0,
+                unmatched: res.totalMissing || 0,
+                duplicates: res.totalDuplicates || 0,
+                errors: res.totalErrors || 0
+            }
+            toast.show("Scan complete: " + (res.totalUsed || 0) + " matched / " + (res.totalMissing || 0) + " unmatched photos found.", "success")
         }
         function onScanError(msg) {
-            root.isScanning = false
             toast.show("Scan error: " + msg, "danger")
         }
         function onPreStatsReady(ps) {
-            root.preStats = ps || { dateFolders: 0, originalPhotos: 0, remainingPhotos: 0 }
+            var p = ps.pre_stats || ps || {}
+            root.preStats = {
+                dateFolders: p.date_folder_count !== undefined ? p.date_folder_count : (p.dateFolders || 0),
+                originalPhotos: p.total_original_photos !== undefined ? p.total_original_photos : (p.originalPhotos || 0),
+                remainingPhotos: p.total_remaining_photos !== undefined ? p.total_remaining_photos : (p.remainingPhotos || 0)
+            }
         }
-        function onRenameFinished(successCount, errorCount) {
-            root.isRenaming = false
+        function onRenameCompleted(successCount, errorCount, reportPath, skippedCount) {
             toast.show("✅ Renamed " + successCount + " files successfully · Report created in Document folder", "success")
-            if (root.engine && root.targetDir) root.engine.scan(root.targetDir)
-        }
-        function onRenameProgress(current, total, filename) {
-            root.progressVal = total > 0 ? (current / total) : 0.0
-            root.currentFileMsg = filename
-        }
-        function onRenameError(msg) {
-            root.isRenaming = false
-            toast.show("Rename error: " + msg, "danger")
+            if (root.engine && root.targetDir) {
+                root.engine.getPreStats(root.targetDir)
+                root.engine.scan(root.targetDir)
+            }
         }
         function onReportExported(path) {
             toast.show("📊 Report generated: " + path, "info")
+        }
+        function onError(msg) {
+            toast.show("Error: " + msg, "danger")
         }
     }
 
@@ -116,43 +119,47 @@ Item {
         spacing: 16
 
         // ── 1. Page Header ────────────────────────────────────────────────────
-        ColumnLayout {
-            spacing: 2
-            Text {
-                text: "Photo Remaining Matcher"
-                font.pixelSize: 20
-                font.weight: Font.DemiBold
-                color: root.theme.textPrimary
+        RowLayout {
+            Layout.fillWidth: true
+            ColumnLayout {
+                spacing: 2
+                Text {
+                    text: "Photo Status Tagger"
+                    font.pixelSize: 22
+                    font.weight: Font.Black
+                    color: root.theme.textPrimary
+                }
+                Text {
+                    text: "Scan and tag event photos with _U (Used / Matched) and _R (Remaining / Unused) status indicators."
+                    font.pixelSize: 12
+                    color: root.theme.textSecondary
+                }
             }
-            Text {
-                text: "Match remaining photos against their master event folders."
-                font.pixelSize: 13
-                color: root.theme.textSecondary
-            }
+            Item { Layout.fillWidth: true }
         }
 
         // ── 2. Directory & Metadata Section ───────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            radius: 8
+            radius: 16
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
-            implicitHeight: dirCol.implicitHeight + 28
+            implicitHeight: dirCol.implicitHeight + 32
 
             ColumnLayout {
                 id: dirCol
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: 14
-                spacing: 12
+                anchors.margins: 16
+                spacing: 14
 
                 Text {
-                    text: "MASTER DIRECTORY"
+                    text: "MASTER EVENT ROOT DIRECTORY"
                     font.pixelSize: 10
-                    font.weight: Font.Bold
-                    font.letterSpacing: 1.0
+                    font.weight: Font.Black
+                    font.letterSpacing: 1.2
                     color: root.theme.textMuted
                 }
 
@@ -162,8 +169,8 @@ Item {
 
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 36
-                        radius: 6
+                        height: 38
+                        radius: 8
                         color: root.theme.surfaceElevated
                         border.color: root.theme.border_
                         border.width: 1
@@ -174,7 +181,7 @@ Item {
                             anchors.rightMargin: 12
                             spacing: 8
 
-                            Text { text: "📁"; font.pixelSize: 12; opacity: 0.7 }
+                            Text { text: "📁"; font.pixelSize: 13; opacity: 0.7 }
 
                             Text {
                                 text: root.targetDir || "Select master event root directory..."
@@ -187,92 +194,57 @@ Item {
                         }
                     }
 
-                    // Browse Button
-                    Rectangle {
-                        width: 90
-                        height: 36
-                        radius: 6
-                        color: brwHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
-                        border.color: brwHov.containsMouse ? root.theme.borderHover : root.theme.border_
-                        border.width: 1
-                        scale: brwHov.pressed ? 0.96 : (brwHov.containsMouse ? 1.02 : 1.0)
-                        Behavior on scale { NumberAnimation { duration: 100 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: "Change"
-                            font.pixelSize: 12
-                            font.weight: Font.Bold
-                            color: root.theme.textPrimary
-                        }
-
-                        MouseArea {
-                            id: brwHov; anchors.fill: parent; hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                if (root.dialogs) {
-                                    var chosen = root.dialogs.chooseDirectory("Select Master Photo Directory", root.targetDir)
-                                    if (chosen) {
-                                        root.targetDir = chosen
-                                        if (root.engine) {
-                                            root.engine.getPreStats(chosen)
-                                            root.engine.scan(chosen)
-                                        }
+                    StudioButton {
+                        text: "Browse"
+                        iconText: "📂"
+                        variant: "glass"
+                        btnSize: "md"
+                        theme: root.theme
+                        onClicked: {
+                            if (root.dialogs) {
+                                var chosen = root.dialogs.selectDirectory("Select Master Photo Directory")
+                                if (chosen) {
+                                    root.targetDir = chosen
+                                    if (root.engine) {
+                                        root.engine.getPreStats(chosen)
+                                        root.engine.scan(chosen)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Scan Action Button
-                    Rectangle {
-                        width: 105
-                        height: 36
-                        radius: 6
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: scnHov.containsMouse ? "#8B5CF6" : "#7C5CBF" }
-                            GradientStop { position: 1.0; color: scnHov.containsMouse ? "#7C5CBF" : "#6D48C5" }
-                        }
+                    StudioButton {
+                        text: root.isScanning ? "Scanning..." : "Scan Directory"
+                        iconText: "⚡"
+                        variant: "primary"
+                        btnSize: "md"
                         enabled: root.targetDir !== "" && !root.isScanning
-                        scale: scnHov.pressed ? 0.96 : (scnHov.containsMouse ? 1.02 : 1.0)
-                        Behavior on scale { NumberAnimation { duration: 100 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.isScanning ? "Scanning..." : "⚡ Scan Now"
-                            font.pixelSize: 12
-                            font.weight: Font.ExtraBold
-                            color: "#FFFFFF"
-                        }
-
-                        MouseArea {
-                            id: scnHov; anchors.fill: parent; hoverEnabled: true
-                            cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: if (parent.enabled && root.engine) root.engine.scan(root.targetDir)
-                        }
+                        loading: root.isScanning
+                        theme: root.theme
+                        onClicked: if (root.engine) root.engine.scan(root.targetDir)
                     }
                 }
 
                 // Horizontal Metadata Strip
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 32
-                    radius: 6
+                    height: 34
+                    radius: 8
                     color: root.theme.surface2
                     border.color: root.theme.borderSubtle
                     border.width: 1
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 12
-                        anchors.rightMargin: 12
+                        anchors.leftMargin: 14
+                        anchors.rightMargin: 14
                         spacing: 16
 
                         RowLayout {
                             spacing: 6
-                            Rectangle { width: 6; height: 6; radius: 3; color: "#6366F1" }
-                            Text { text: String(root.preStats.dateFolders || 0); font.pixelSize: 12; font.weight: Font.Bold; font.family: "Consolas, monospace"; color: "#6366F1" }
+                            Rectangle { width: 6; height: 6; radius: 3; color: root.theme.accent }
+                            Text { text: String(root.preStats.dateFolders || 0); font.pixelSize: 12; font.weight: Font.Bold; font.family: "Consolas, monospace"; color: root.theme.accent }
                             Text { text: "DATE FOLDERS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted }
                         }
 
@@ -280,8 +252,8 @@ Item {
 
                         RowLayout {
                             spacing: 6
-                            Rectangle { width: 6; height: 6; radius: 3; color: "#059669" }
-                            Text { text: String(root.preStats.originalPhotos || 0); font.pixelSize: 12; font.weight: Font.Bold; font.family: "Consolas, monospace"; color: "#059669" }
+                            Rectangle { width: 6; height: 6; radius: 3; color: root.theme.success }
+                            Text { text: String(root.preStats.originalPhotos || 0); font.pixelSize: 12; font.weight: Font.Bold; font.family: "Consolas, monospace"; color: root.theme.success }
                             Text { text: "MASTER PHOTOS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted }
                         }
 
@@ -289,8 +261,8 @@ Item {
 
                         RowLayout {
                             spacing: 6
-                            Rectangle { width: 6; height: 6; radius: 3; color: "#DB2777" }
-                            Text { text: String(root.preStats.remainingPhotos || 0); font.pixelSize: 12; font.weight: Font.Bold; font.family: "Consolas, monospace"; color: "#DB2777" }
+                            Rectangle { width: 6; height: 6; radius: 3; color: root.theme.camB }
+                            Text { text: String(root.preStats.remainingPhotos || 0); font.pixelSize: 12; font.weight: Font.Bold; font.family: "Consolas, monospace"; color: root.theme.camB }
                             Text { text: "REMAINING PHOTOS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted }
                         }
 
@@ -303,8 +275,8 @@ Item {
         // ── 3. Match Summary Strip ────────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: 44
-            radius: 8
+            height: 48
+            radius: 12
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
@@ -317,9 +289,9 @@ Item {
 
                 // Total Remaining Pill
                 Rectangle {
-                    height: 28
-                    width: remRow.implicitWidth + 16
-                    radius: 5
+                    height: 30
+                    width: remRow.implicitWidth + 18
+                    radius: 7
                     color: root.theme.surface2
                     RowLayout {
                         id: remRow; anchors.centerIn: parent; spacing: 6
@@ -330,59 +302,31 @@ Item {
 
                 // Matched Pill
                 Rectangle {
-                    height: 28
-                    width: matRow.implicitWidth + 16
-                    radius: 5
-                    color: "#ECFDF5"
-                    border.color: "#A7F3D0"
+                    height: 30
+                    width: matRow.implicitWidth + 18
+                    radius: 7
+                    color: root.theme.isDark ? "#064E3B" : "#ECFDF5"
+                    border.color: root.theme.isDark ? "#10B981" : "#A7F3D0"
                     border.width: 1
                     RowLayout {
                         id: matRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: String(root.stats.matched || 0); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: "#059669" }
-                        Text { text: "Matched (_U)"; font.pixelSize: 11; font.weight: Font.Bold; color: "#059669" }
+                        Text { text: String(root.stats.matched || 0); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: root.theme.success }
+                        Text { text: "Matched (_U)"; font.pixelSize: 11; font.weight: Font.Bold; color: root.theme.success }
                     }
                 }
 
                 // Not Matched Pill
                 Rectangle {
-                    height: 28
-                    width: unmatRow.implicitWidth + 16
-                    radius: 5
-                    color: "#FEF2F2"
-                    border.color: "#FECACA"
+                    height: 30
+                    width: unmatRow.implicitWidth + 18
+                    radius: 7
+                    color: root.theme.isDark ? "#4C0519" : "#FFF1F2"
+                    border.color: root.theme.isDark ? "#F43F5E" : "#FECACA"
                     border.width: 1
                     RowLayout {
                         id: unmatRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: String(root.stats.unmatched || 0); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: "#DC2626" }
-                        Text { text: "Not Matched (_R)"; font.pixelSize: 11; font.weight: Font.Bold; color: "#DC2626" }
-                    }
-                }
-
-                // Duplicates Pill
-                Rectangle {
-                    height: 28
-                    width: dupRow.implicitWidth + 16
-                    radius: 5
-                    color: "#FFFBEB"
-                    border.color: "#FDE68A"
-                    border.width: 1
-                    RowLayout {
-                        id: dupRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: String(root.stats.duplicates || 0); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: "#D97706" }
-                        Text { text: "Duplicates"; font.pixelSize: 11; font.weight: Font.Bold; color: "#D97706" }
-                    }
-                }
-
-                // Errors Pill
-                Rectangle {
-                    height: 28
-                    width: errRow.implicitWidth + 16
-                    radius: 5
-                    color: root.theme.surface2
-                    RowLayout {
-                        id: errRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: String(root.stats.errors || 0); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: root.theme.textMuted }
-                        Text { text: "Errors"; font.pixelSize: 11; color: root.theme.textMuted }
+                        Text { text: String(root.stats.unmatched || 0); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: root.theme.danger }
+                        Text { text: "Not Matched (_R)"; font.pixelSize: 11; font.weight: Font.Bold; color: root.theme.danger }
                     }
                 }
 
@@ -399,15 +343,15 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 height: 38
-                radius: 6
+                radius: 8
                 color: root.theme.surface
                 border.color: sInp.activeFocus ? root.theme.accent : root.theme.border_
                 border.width: sInp.activeFocus ? 1.5 : 1
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
+                    anchors.leftMargin: 12
+                    anchors.rightMargin: 12
                     spacing: 8
 
                     Text { text: "🔍"; font.pixelSize: 12; opacity: 0.6 }
@@ -433,7 +377,7 @@ Item {
                 onActivated: root.statusFilter = currentText
 
                 background: Rectangle {
-                    radius: 6
+                    radius: 8
                     color: root.theme.surface
                     border.color: root.theme.border_
                     border.width: 1
@@ -448,75 +392,32 @@ Item {
                 }
             }
 
-            // Export Report Action
-            Rectangle {
-                width: 120
-                height: 38
-                radius: 6
-                color: expHov.containsMouse ? root.theme.surface2 : root.theme.surface
-                border.color: expHov.containsMouse ? root.theme.accent : root.theme.border_
-                border.width: 1
-                scale: expHov.pressed ? 0.96 : (expHov.containsMouse ? 1.02 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 100 } }
-
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 6
-                    Text { text: "📊"; font.pixelSize: 11 }
-                    Text {
-                        text: "Export Report"
-                        font.pixelSize: 12
-                        font.weight: Font.Bold
-                        color: expHov.containsMouse ? root.theme.accent : root.theme.textPrimary
-                    }
-                }
-
-                MouseArea {
-                    id: expHov; anchors.fill: parent; hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (root.engine && root.targetDir) {
-                            var expPath = root.engine.exportReport(root.targetDir)
-                            toast.show("Report exported to " + expPath, "success")
-                        }
+            StudioButton {
+                text: "Export CSV"
+                iconText: "📊"
+                variant: "glass"
+                btnSize: "md"
+                theme: root.theme
+                onClicked: {
+                    if (root.engine && root.targetDir) {
+                        root.engine.exportReport("csv", root.targetDir + "/Document/Photo_Match_Report.csv")
+                        toast.show("Report exported successfully", "success")
                     }
                 }
             }
 
-            // Rename Remaining Photos Primary Action
-            Rectangle {
-                width: 210
-                height: 38
-                radius: 6
-                gradient: Gradient {
-                    orientation: Gradient.Horizontal
-                    GradientStop { position: 0.0; color: renHov.containsMouse ? "#8B5CF6" : "#7C5CBF" }
-                    GradientStop { position: 1.0; color: renHov.containsMouse ? "#7C5CBF" : "#6D48C5" }
-                }
+            StudioButton {
+                text: root.isRenaming ? "Renaming..." : "Tag & Rename (_U / _R)"
+                iconText: "🏷️"
+                variant: "primary"
+                btnSize: "md"
                 enabled: root.results.length > 0 && !root.isRenaming
-                scale: renHov.pressed ? 0.96 : (renHov.containsMouse ? 1.02 : 1.0)
-                Behavior on scale { NumberAnimation { duration: 100 } }
-
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 6
-                    Text { text: "🏷️"; font.pixelSize: 12 }
-                    Text {
-                        text: root.isRenaming ? "Renaming Files..." : "Rename Remaining Photos"
-                        font.pixelSize: 12
-                        font.weight: Font.ExtraBold
-                        color: "#FFFFFF"
-                    }
-                }
-
-                MouseArea {
-                    id: renHov; anchors.fill: parent; hoverEnabled: true
-                    cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: {
-                        if (parent.enabled && root.engine) {
-                            root.isRenaming = true
-                            root.engine.rename()
-                        }
+                loading: root.isRenaming
+                theme: root.theme
+                onClicked: {
+                    if (root.engine) {
+                        root.isRenaming = true
+                        root.engine.rename()
                     }
                 }
             }
@@ -526,7 +427,7 @@ Item {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: 8
+            radius: 14
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
@@ -539,21 +440,19 @@ Item {
                 // Table Header
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 34
+                    height: 36
                     color: root.theme.surface2
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
                         spacing: 10
 
-                        Text { text: "STATUS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 100 }
-                        Text { text: "FILE NAME"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 200 }
-                        Text { text: "DATE"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 110 }
-                        Text { text: "MASTER FOLDER"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.fillWidth: true }
-                        Text { text: "MATCH TYPE"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 130 }
-                        Text { text: "ACTION"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 50; horizontalAlignment: Text.AlignRight }
+                        Text { text: "STATUS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 110 }
+                        Text { text: "ORIGINAL FILENAME"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 220 }
+                        Text { text: "DATE FOLDER"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 130 }
+                        Text { text: "PROPOSED NEW FILENAME"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.fillWidth: true }
                     }
 
                     Rectangle {
@@ -561,7 +460,7 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         height: 1
-                        color: root.theme.border_
+                        color: root.theme.borderSubtle
                     }
                 }
 
@@ -576,7 +475,7 @@ Item {
 
                     delegate: Rectangle {
                         width: ListView.view.width
-                        height: 40
+                        height: 42
                         color: rowHov.containsMouse ? root.theme.surface2 : "transparent"
 
                         Rectangle {
@@ -590,66 +489,49 @@ Item {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 14
-                            anchors.rightMargin: 14
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
                             spacing: 10
 
                             // Semantic Status Pill Badge
                             SemanticBadge {
-                                Layout.preferredWidth: 96
+                                Layout.preferredWidth: 104
                                 theme: root.theme
-                                type: modelData.status === "MATCHED" ? "matched"
-                                    : modelData.status === "NOT_MATCHED" ? "danger"
-                                    : "mismatch"
-                                text: modelData.status === "MATCHED" ? "Matched"
-                                    : modelData.status === "NOT_MATCHED" ? "Unmatched"
-                                    : "Duplicate"
+                                type: (modelData.status === "MATCHED" || modelData.status === "Used") ? "matched"
+                                    : "danger"
+                                text: (modelData.status === "MATCHED" || modelData.status === "Used") ? "Matched (_U)"
+                                    : "Missing (_R)"
                                 showDot: true
                             }
 
-                            // Filename
+                            // Original Filename
                             Text {
-                                text: modelData.filename || ""
+                                text: modelData.current_filename || modelData.original_name || modelData.filename || ""
                                 font.pixelSize: 12
                                 font.family: "Consolas, monospace"
                                 color: root.theme.textPrimary
-                                Layout.preferredWidth: 200
+                                Layout.preferredWidth: 220
                                 elide: Text.ElideMiddle
                             }
 
-                            // Date
+                            // Date Folder
                             Text {
-                                text: modelData.dateFolder || "—"
+                                text: modelData.date_folder_name || modelData.dateFolder || "—"
                                 font.pixelSize: 12
                                 color: root.theme.textSecondary
-                                Layout.preferredWidth: 110
+                                Layout.preferredWidth: 130
                                 elide: Text.ElideRight
                             }
 
-                            // Master Folder
+                            // Proposed New Filename
                             Text {
-                                text: modelData.targetFolder || "—"
+                                text: modelData.proposed_new_filename || modelData.target_name || modelData.targetFolder || "—"
                                 font.pixelSize: 12
-                                color: root.theme.textSecondary
+                                font.family: "Consolas, monospace"
+                                font.weight: Font.DemiBold
+                                color: (modelData.status === "MATCHED" || modelData.status === "Used") ? root.theme.success : root.theme.danger
                                 Layout.fillWidth: true
                                 elide: Text.ElideMiddle
-                            }
-
-                            // Match Type
-                            Text {
-                                text: modelData.matchType || "Exact filename"
-                                font.pixelSize: 11
-                                color: root.theme.textMuted
-                                Layout.preferredWidth: 130
-                            }
-
-                            // Action arrow
-                            Text {
-                                text: "→"
-                                font.pixelSize: 12
-                                color: rowHov.containsMouse ? root.theme.accent : root.theme.textMuted
-                                Layout.preferredWidth: 50
-                                horizontalAlignment: Text.AlignRight
                             }
                         }
 

@@ -48,18 +48,19 @@ Item {
                 toast.show(errorMsg, "danger")
             }
         }
-        function onTransferProgressChanged(current, total, filename, speed) {
-            root.transferCurrentCount = current
-            root.transferTotalCount = total
-            root.transferCurrentFile = filename
-            root.transferSpeed = speed
-            root.transferProgress = total > 0 ? (current / total) : 0.0
+        function onTransferProgress(curr, tot, fn, spd) {
+            root.transferCurrentCount = curr || 0
+            root.transferTotalCount = tot || 0
+            root.transferCurrentFile = fn || ""
+            root.transferSpeed = spd || ""
+            root.transferProgress = tot > 0 ? (curr / tot) : 0.0
         }
-        function onTransferComplete(summary) {
+        function onTransferCompleted(summary, trFiles) {
             root.isTransferring = false
-            toast.show("✅ Transfer complete: " + (summary ? summary.transferredClips : 0) + " clips transferred successfully.", "success")
+            var c = trFiles ? trFiles.length : 0
+            toast.show("✅ Transfer complete: " + c + " clips transferred successfully.", "success")
         }
-        function onTransferFailed(reason) {
+        function onTransferError(reason) {
             root.isTransferring = false
             toast.show("Transfer error: " + reason, "danger")
         }
@@ -72,37 +73,41 @@ Item {
         spacing: 16
 
         // ── 1. Page Header ────────────────────────────────────────────────────
-        ColumnLayout {
-            spacing: 2
-            Text {
-                text: "Video Sequence Matcher"
-                font.pixelSize: 20
-                font.weight: Font.DemiBold
-                color: root.theme.textPrimary
+        RowLayout {
+            Layout.fillWidth: true
+            ColumnLayout {
+                spacing: 2
+                Text {
+                    text: "Sync Photo Video"
+                    font.pixelSize: 22
+                    font.weight: Font.Black
+                    color: root.theme.textPrimary
+                }
+                Text {
+                    text: "Pair multi-camera video clips with photo subfolders and synchronize thumbnails automatically."
+                    font.pixelSize: 12
+                    color: root.theme.textSecondary
+                }
             }
-            Text {
-                text: "Pair video clips with corresponding photo folders automatically."
-                font.pixelSize: 13
-                color: root.theme.textSecondary
-            }
+            Item { Layout.fillWidth: true }
         }
 
         // ── 2. Directory Setup Card ───────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            radius: 8
+            radius: 16
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
-            implicitHeight: dirSetupCol.implicitHeight + 28
+            implicitHeight: dirSetupCol.implicitHeight + 32
 
             ColumnLayout {
                 id: dirSetupCol
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: 14
-                spacing: 12
+                anchors.margins: 16
+                spacing: 14
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -114,9 +119,9 @@ Item {
                         spacing: 6
 
                         Text {
-                            text: "VIDEO SOURCE"
+                            text: "VIDEO SOURCE DIRECTORY"
                             font.pixelSize: 10
-                            font.weight: Font.Bold
+                            font.weight: Font.Black
                             font.letterSpacing: 1.0
                             color: root.theme.textMuted
                         }
@@ -127,18 +132,18 @@ Item {
 
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 36
-                                radius: 6
+                                height: 38
+                                radius: 8
                                 color: root.theme.surfaceElevated
                                 border.color: root.theme.border_
                                 border.width: 1
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
                                     spacing: 8
-                                    Text { text: "🎬"; font.pixelSize: 12; opacity: 0.7 }
+                                    Text { text: "🎬"; font.pixelSize: 13; opacity: 0.7 }
                                     Text {
                                         text: root.videoDir || "Select video source folder..."
                                         font.pixelSize: 12
@@ -150,22 +155,16 @@ Item {
                                 }
                             }
 
-                            Rectangle {
-                                width: 80
-                                height: 36
-                                radius: 6
-                                color: vChgHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
-                                border.color: root.theme.border_
-                                border.width: 1
-
-                                Text { anchors.centerIn: parent; text: "Change"; font.pixelSize: 12; font.weight: Font.DemiBold; color: root.theme.textPrimary }
-                                MouseArea {
-                                    id: vChgHov; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (root.dialogs) {
-                                            var c = root.dialogs.chooseDirectory("Select Video Source Directory", root.videoDir)
-                                            if (c) root.videoDir = c
-                                        }
+                            StudioButton {
+                                text: "Browse"
+                                iconText: "📂"
+                                variant: "glass"
+                                btnSize: "md"
+                                theme: root.theme
+                                onClicked: {
+                                    if (root.dialogs) {
+                                        var c = root.dialogs.selectDirectory("Select Video Source Directory")
+                                        if (c) root.videoDir = c
                                     }
                                 }
                             }
@@ -178,9 +177,9 @@ Item {
                         spacing: 6
 
                         Text {
-                            text: "PHOTO MASTER"
+                            text: "PHOTO MASTER DIRECTORY"
                             font.pixelSize: 10
-                            font.weight: Font.Bold
+                            font.weight: Font.Black
                             font.letterSpacing: 1.0
                             color: root.theme.textMuted
                         }
@@ -191,18 +190,18 @@ Item {
 
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 36
-                                radius: 6
+                                height: 38
+                                radius: 8
                                 color: root.theme.surfaceElevated
                                 border.color: root.theme.border_
                                 border.width: 1
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.leftMargin: 10
-                                    anchors.rightMargin: 10
+                                    anchors.leftMargin: 12
+                                    anchors.rightMargin: 12
                                     spacing: 8
-                                    Text { text: "📸"; font.pixelSize: 12; opacity: 0.7 }
+                                    Text { text: "📸"; font.pixelSize: 13; opacity: 0.7 }
                                     Text {
                                         text: root.photoDir || "Select master photo folder..."
                                         font.pixelSize: 12
@@ -214,62 +213,39 @@ Item {
                                 }
                             }
 
-                            Rectangle {
-                                width: 80
-                                height: 36
-                                radius: 6
-                                color: pChgHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
-                                border.color: pChgHov.containsMouse ? root.theme.borderHover : root.theme.border_
-                                border.width: 1
-                                scale: pChgHov.pressed ? 0.96 : (pChgHov.containsMouse ? 1.02 : 1.0)
-                                Behavior on scale { NumberAnimation { duration: 100 } }
-
-                                Text { anchors.centerIn: parent; text: "Change"; font.pixelSize: 12; font.weight: Font.Bold; color: root.theme.textPrimary }
-                                MouseArea {
-                                    id: pChgHov; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (root.dialogs) {
-                                            var c = root.dialogs.chooseDirectory("Select Photo Master Directory", root.photoDir)
-                                            if (c) root.photoDir = c
-                                        }
+                            StudioButton {
+                                text: "Browse"
+                                iconText: "📂"
+                                variant: "glass"
+                                btnSize: "md"
+                                theme: root.theme
+                                onClicked: {
+                                    if (root.dialogs) {
+                                        var c = root.dialogs.selectDirectory("Select Photo Master Directory")
+                                        if (c) root.photoDir = c
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Scan & Compare Button
-                    Rectangle {
+                    // Scan & Compare Action
+                    ColumnLayout {
+                        spacing: 6
                         Layout.alignment: Qt.AlignBottom
-                        width: 145
-                        height: 36
-                        radius: 6
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: scnCmpHov.containsMouse ? "#10B981" : "#059669" }
-                            GradientStop { position: 1.0; color: scnCmpHov.containsMouse ? "#059669" : "#047857" }
-                        }
-                        enabled: root.videoDir !== "" && root.photoDir !== "" && !root.isScanning
-                        scale: scnCmpHov.pressed ? 0.96 : (scnCmpHov.containsMouse ? 1.02 : 1.0)
-                        Behavior on scale { NumberAnimation { duration: 100 } }
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-                            Text { text: "⚡"; font.pixelSize: 12 }
-                            Text {
-                                text: root.isScanning ? "Comparing..." : "Scan & Compare"
-                                font.pixelSize: 12
-                                font.weight: Font.ExtraBold
-                                color: "#FFFFFF"
-                            }
-                        }
+                        Text { text: "ACTION"; font.pixelSize: 10; font.weight: Font.Black; font.letterSpacing: 1.0; color: root.theme.textMuted }
 
-                        MouseArea {
-                            id: scnCmpHov; anchors.fill: parent; hoverEnabled: true
-                            cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        StudioButton {
+                            text: root.isScanning ? "Comparing..." : "Scan & Compare"
+                            iconText: "⚡"
+                            variant: "success"
+                            btnSize: "md"
+                            enabled: root.videoDir !== "" && root.photoDir !== "" && !root.isScanning
+                            loading: root.isScanning
+                            theme: root.theme
                             onClicked: {
-                                if (parent.enabled && root.engine) {
+                                if (root.engine) {
                                     root.isScanning = true
                                     root.engine.scanFolder({ videoFolderPath: root.videoDir, photoFolderPath: root.photoDir })
                                 }
@@ -283,8 +259,8 @@ Item {
         // ── 3. Match Summary Strip & Rule ─────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: 44
-            radius: 8
+            height: 48
+            radius: 12
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
@@ -296,9 +272,9 @@ Item {
                 spacing: 12
 
                 Rectangle {
-                    height: 28
-                    width: totClipsRow.implicitWidth + 16
-                    radius: 5
+                    height: 30
+                    width: totClipsRow.implicitWidth + 18
+                    radius: 7
                     color: root.theme.surface2
                     RowLayout {
                         id: totClipsRow; anchors.centerIn: parent; spacing: 6
@@ -308,50 +284,61 @@ Item {
                 }
 
                 Rectangle {
-                    height: 28
-                    width: matClipsRow.implicitWidth + 16
-                    radius: 5
-                    color: "#ECFDF5"
-                    border.color: "#A7F3D0"
+                    height: 30
+                    width: matClipsRow.implicitWidth + 18
+                    radius: 7
+                    color: root.theme.isDark ? "#064E3B" : "#ECFDF5"
+                    border.color: root.theme.isDark ? "#10B981" : "#A7F3D0"
                     border.width: 1
                     RowLayout {
                         id: matClipsRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: String(root.matched.length); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: "#059669" }
-                        Text { text: "Matched"; font.pixelSize: 11; font.weight: Font.Bold; color: "#059669" }
+                        Text { text: String(root.matched.length); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: root.theme.success }
+                        Text { text: "Matched"; font.pixelSize: 11; font.weight: Font.Bold; color: root.theme.success }
                     }
                 }
 
                 Rectangle {
-                    height: 28
-                    width: revClipsRow.implicitWidth + 16
-                    radius: 5
-                    color: root.unmatched.length > 0 ? "#FEF2F2" : root.theme.surface2
-                    border.color: root.unmatched.length > 0 ? "#FECACA" : "transparent"
+                    height: 30
+                    width: revClipsRow.implicitWidth + 18
+                    radius: 7
+                    color: root.unmatched.length > 0 ? (root.theme.isDark ? "#4C0519" : "#FFF1F2") : root.theme.surface2
+                    border.color: root.unmatched.length > 0 ? (root.theme.isDark ? "#F43F5E" : "#FECACA") : "transparent"
                     border.width: 1
                     RowLayout {
                         id: revClipsRow; anchors.centerIn: parent; spacing: 6
-                        Text { text: String(root.unmatched.length); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: root.unmatched.length > 0 ? "#DC2626" : root.theme.textMuted }
-                        Text { text: "Require Review"; font.pixelSize: 11; font.weight: Font.Bold; color: root.unmatched.length > 0 ? "#DC2626" : root.theme.textMuted }
+                        Text { text: String(root.unmatched.length); font.pixelSize: 12; font.weight: Font.ExtraBold; font.family: "Consolas, monospace"; color: root.unmatched.length > 0 ? root.theme.danger : root.theme.textMuted }
+                        Text { text: "Require Review"; font.pixelSize: 11; font.weight: Font.Bold; color: root.unmatched.length > 0 ? root.theme.danger : root.theme.textMuted }
                     }
                 }
 
                 Text {
-                    text: "✓ Non-video event folders (MQ, MF, H) automatically ignored"
+                    text: "✓ Non-video event folders (MQ, MF, H) automatically bypassed"
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
-                    color: "#059669"
+                    color: root.theme.success
                     leftPadding: 8
                 }
 
                 Item { Layout.fillWidth: true }
+
+                // ── Verify Sequence Pairs (Modal Inspector) ───────────────────
+                StudioButton {
+                    text: "Verify Pairs"
+                    iconText: "🔍"
+                    variant: "primary"
+                    btnSize: "sm"
+                    enabled: (root.matched.length + root.unmatched.length) > 0
+                    theme: root.theme
+                    onClicked: verifyModal.openForPair(0, "ALL")
+                }
             }
         }
 
-        // ── 4. Main Tabular Workspace (Review Required + Matched Clips) ───────
+        // ── 4. Main Tabular Workspace ─────────────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            radius: 8
+            radius: 14
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
@@ -364,19 +351,19 @@ Item {
                 // Table Header
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 34
+                    height: 36
                     color: root.theme.surface2
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.leftMargin: 14
-                        anchors.rightMargin: 14
+                        anchors.leftMargin: 16
+                        anchors.rightMargin: 16
                         spacing: 12
 
-                        Text { text: "VIDEO CLIP"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 260 }
+                        Text { text: "VIDEO CLIP"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 240 }
                         Text { text: "PHOTO FOLDER TARGET"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.fillWidth: true }
-                        Text { text: "STATUS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 100 }
-                        Text { text: "ACTION"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 120; horizontalAlignment: Text.AlignRight }
+                        Text { text: "STATUS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 90 }
+                        Text { text: "ACTIONS"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted; Layout.preferredWidth: 160; horizontalAlignment: Text.AlignRight }
                     }
 
                     Rectangle {
@@ -384,7 +371,7 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         height: 1
-                        color: root.theme.border_
+                        color: root.theme.borderSubtle
                     }
                 }
 
@@ -399,8 +386,16 @@ Item {
 
                     delegate: Rectangle {
                         width: ListView.view.width
-                        height: 48
+                        height: 44
                         color: rowHov.containsMouse ? root.theme.surface2 : "transparent"
+
+                        MouseArea {
+                            id: rowHov
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            z: 0
+                            onDoubleClicked: verifyModal.openForPair(index, "ALL")
+                        }
 
                         Rectangle {
                             visible: index > 0
@@ -413,17 +408,18 @@ Item {
 
                         RowLayout {
                             anchors.fill: parent
-                            anchors.leftMargin: 14
-                            anchors.rightMargin: 14
+                            anchors.leftMargin: 16
+                            anchors.rightMargin: 16
                             spacing: 12
+                            z: 1
 
-                            // Video Clip with small thumbnail icon
+                            // Video Clip
                             RowLayout {
-                                Layout.preferredWidth: 260
+                                Layout.preferredWidth: 240
                                 spacing: 8
 
                                 Rectangle {
-                                    width: 32; height: 24; radius: 3
+                                    width: 32; height: 24; radius: 5
                                     color: root.theme.surfaceElevated
                                     border.color: root.theme.border_
                                     border.width: 1
@@ -470,39 +466,35 @@ Item {
                                 showDot: true
                             }
 
-                            // Actions
+                            // Action Buttons: Link Folder / Verify
                             RowLayout {
-                                Layout.preferredWidth: 120
+                                Layout.preferredWidth: 160
                                 spacing: 6
+                                Layout.alignment: Qt.AlignRight
 
-                                Rectangle {
-                                    visible: !modelData.isMatched
-                                    height: 24
-                                    width: 60
-                                    radius: 4
-                                    color: ignHov.containsMouse ? root.theme.surface2 : "transparent"
-                                    border.color: root.theme.border_
-                                    border.width: 1
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: "Ignore"
-                                        font.pixelSize: 11
-                                        color: root.theme.textMuted
+                                StudioButton {
+                                    text: modelData.isMatched ? "Edit Link" : "Link Folder"
+                                    iconText: "🔗"
+                                    variant: modelData.isMatched ? "glass" : "cyan"
+                                    btnSize: "sm"
+                                    theme: root.theme
+                                    onClicked: {
+                                        folderLinkDialog.openForVideo(modelData)
                                     }
+                                }
 
-                                    MouseArea {
-                                        id: ignHov; anchors.fill: parent; hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            if (root.engine) root.engine.ignoreSingleMismatch(modelData.id)
-                                        }
+                                StudioButton {
+                                    text: "Inspect"
+                                    iconText: "🔍"
+                                    variant: "glass"
+                                    btnSize: "sm"
+                                    theme: root.theme
+                                    onClicked: {
+                                        verifyModal.openForPair(index, "ALL")
                                     }
                                 }
                             }
                         }
-
-                        MouseArea { id: rowHov; anchors.fill: parent; hoverEnabled: true }
                     }
 
                     // Skeleton Shimmer Loader during scanning
@@ -550,8 +542,8 @@ Item {
         // ── 5. Transfer Execution Control Bar ─────────────────────────────────
         Rectangle {
             Layout.fillWidth: true
-            height: 52
-            radius: 8
+            height: 56
+            radius: 12
             color: root.theme.surface
             border.color: root.theme.border_
             border.width: 1
@@ -565,7 +557,7 @@ Item {
                 // Mode Selector
                 RowLayout {
                     spacing: 12
-                    Text { text: "TRANSFER MODE"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted }
+                    Text { text: "TRANSFER MODE"; font.pixelSize: 10; font.weight: Font.Black; font.letterSpacing: 1.0; color: root.theme.textMuted }
 
                     RowLayout {
                         spacing: 4
@@ -575,7 +567,7 @@ Item {
                             checked: root.transferMode === "COPY"
                             onClicked: {
                                 root.transferMode = "COPY"
-                                if (root.engine) root.engine.setTransferMode("COPY")
+                                if (root.engine) root.engine.transferMode = "copy"
                             }
                         }
                         RadioButton {
@@ -584,7 +576,7 @@ Item {
                             checked: root.transferMode === "MOVE"
                             onClicked: {
                                 root.transferMode = "MOVE"
-                                if (root.engine) root.engine.setTransferMode("MOVE")
+                                if (root.engine) root.engine.transferMode = "move"
                             }
                         }
                     }
@@ -592,40 +584,18 @@ Item {
 
                 Item { Layout.fillWidth: true }
 
-                // Start Transfer Action
-                Rectangle {
-                    width: 175
-                    height: 38
-                    radius: 6
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: trsHov.containsMouse ? "#10B981" : "#059669" }
-                        GradientStop { position: 1.0; color: trsHov.containsMouse ? "#059669" : "#047857" }
-                    }
-                    enabled: root.matched.length > 0 && root.unmatched.length === 0 && !root.isTransferring
-                    scale: trsHov.pressed ? 0.96 : (trsHov.containsMouse ? 1.02 : 1.0)
-                    Behavior on scale { NumberAnimation { duration: 100 } }
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Text { text: "🚀"; font.pixelSize: 12 }
-                        Text {
-                            text: root.isTransferring ? "Transferring..." : "Start Transfer →"
-                            font.pixelSize: 12
-                            font.weight: Font.ExtraBold
-                            color: "#FFFFFF"
-                        }
-                    }
-
-                    MouseArea {
-                        id: trsHov; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: {
-                            if (parent.enabled && root.engine) {
-                                root.isTransferring = true
-                                root.engine.executeTransfer()
-                            }
+                StudioButton {
+                    text: root.isTransferring ? "Transferring..." : "Start Video Transfer"
+                    iconText: "🚀"
+                    variant: "success"
+                    btnSize: "md"
+                    enabled: root.matched.length > 0 && !root.isTransferring
+                    loading: root.isTransferring
+                    theme: root.theme
+                    onClicked: {
+                        if (root.engine) {
+                            root.isTransferring = true
+                            root.engine.executeTransfer(root.matched)
                         }
                     }
                 }
@@ -643,7 +613,28 @@ Item {
         currentCount: root.transferCurrentCount
         totalCount: root.transferTotalCount
         progress: root.transferProgress
-        onCancelClicked: if (root.engine) root.engine.cancelTransfer()
+    }
+
+    // ── Folder Link Dialog ───────────────────────────────────────────────────
+    FolderLinkDialog {
+        id: folderLinkDialog
+        theme: root.theme
+        photoFoldersByDate: root.photoFoldersByDate
+        onFolderSelected: (vPath, pPath, pName) => {
+            if (root.engine) {
+                root.engine.linkVideoToPhotoFolder(vPath, pPath)
+                toast.show("✓ Linked video to " + pName, "success")
+            }
+        }
+    }
+
+    // ── Sequence Verification & Dual Thumbnail Inspector Modal ───────────────
+    SequenceVerificationModal {
+        id: verifyModal
+        theme: root.theme
+        pairs: [].concat(root.matched).concat(root.unmatched)
+        photoFoldersByDate: root.photoFoldersByDate
+        onRequestRelink: (item) => folderLinkDialog.openForVideo(item)
     }
 
     // ── Toast Notification ────────────────────────────────────────────────────

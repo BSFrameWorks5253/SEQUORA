@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 title SEQUORA Studio — Professional Windows Setup
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
 echo ===============================================================================
 echo  SEQUORA Studio — Professional Windows Setup ^& Installer

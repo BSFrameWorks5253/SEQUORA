@@ -24,7 +24,7 @@ Rectangle {
 
     Layout.fillWidth: true
     height: 52
-    color: root.theme.isDark ? "#141417" : "#FFFFFF"
+    color: root.theme.surface
 
     // Subtle bottom gradient border for studio depth
     Rectangle {
@@ -33,14 +33,6 @@ Rectangle {
         anchors.right: parent.right
         height: 1
         color: root.theme.border_
-    }
-
-    Rectangle {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: 1
-        color: root.theme.isDark ? Qt.rgba(1.0, 1.0, 1.0, 0.04) : Qt.rgba(0.0, 0.0, 0.0, 0.02)
     }
 
     RowLayout {
@@ -56,10 +48,10 @@ Rectangle {
             // Live Engine Pulse Pill
             Rectangle {
                 height: 24
-                width: engRow.implicitWidth + 14
+                width: engRow.implicitWidth + 16
                 radius: 12
                 color: root.theme.isDark ? "#064E3B" : "#ECFDF5"
-                border.color: root.theme.isDark ? "#059669" : "#A7F3D0"
+                border.color: root.theme.isDark ? "#10B981" : "#A7F3D0"
                 border.width: 1
 
                 RowLayout {
@@ -68,7 +60,7 @@ Rectangle {
                     spacing: 6
 
                     Rectangle {
-                        width: 6; height: 6; radius: 3
+                        width: 7; height: 7; radius: 3.5
                         color: root.theme.success
 
                         SequentialAnimation on opacity {
@@ -104,9 +96,10 @@ Rectangle {
 
             Text {
                 text: activePage === "overview"           ? "Workspace Overview"
-                    : activePage === "photoMatcher"       ? "Photo Remaining Matcher"
-                    : activePage === "videoTransfer"      ? "Video Sequence Matcher"
-                    : activePage === "thumbnailSeparator" ? "Thumbnail Separator"
+                    : activePage === "videoTransfer"      ? "Sync Photo Video"
+                    : activePage === "thumbnailSeparator" ? "Thumbnail Shifter"
+                    : activePage === "photoMatcher"       ? "Photo Status Tagger"
+                    : activePage === "pvSeparator"        ? "PV Separator (Photo & Video)"
                     : activePage === "remainingCollector" ? "Remaining Photos Shifter"
                     : activePage === "googleDriveMain"    ? "Main Data Drive (Cloud)"
                     : activePage === "activity"           ? "Chronological Activity Log"
@@ -124,12 +117,12 @@ Rectangle {
         Rectangle {
             width: 220
             height: 32
-            radius: 6
+            radius: 8
             color: cmdHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
             border.color: cmdHov.containsMouse ? root.theme.accent : root.theme.border_
             border.width: 1
             scale: cmdHov.pressed ? 0.98 : (cmdHov.containsMouse ? 1.02 : 1.0)
-            Behavior on scale { NumberAnimation { duration: 100 } }
+            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
 
             RowLayout {
                 anchors.fill: parent
@@ -167,15 +160,18 @@ Rectangle {
             }
         }
 
-        // ── Zoom Controls ──────────────────────────────────────────────────────
+        // ── Zoom Controls with Tactile Spring ──────────────────────────────────
         RowLayout {
             spacing: 2
 
             Rectangle {
-                width: 28; height: 28; radius: 5
+                width: 28; height: 28; radius: 6
                 color: zOutHov.containsMouse ? root.theme.surface2 : "transparent"
                 border.color: zOutHov.containsMouse ? root.theme.border_ : "transparent"
                 border.width: 1
+                scale: zOutHov.pressed ? 0.92 : (zOutHov.containsMouse ? 1.08 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                 Text { anchors.centerIn: parent; text: "−"; font.pixelSize: 14; font.weight: Font.Bold; color: root.theme.textSecondary }
                 MouseArea {
                     id: zOutHov; anchors.fill: parent; hoverEnabled: true
@@ -187,8 +183,11 @@ Rectangle {
             Rectangle {
                 height: 24
                 width: zLbl.implicitWidth + 12
-                radius: 4
+                radius: 6
                 color: zRstHov.containsMouse ? root.theme.surface2 : "transparent"
+                scale: zRstHov.pressed ? 0.92 : (zRstHov.containsMouse ? 1.05 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                 Text {
                     id: zLbl
                     anchors.centerIn: parent
@@ -206,10 +205,13 @@ Rectangle {
             }
 
             Rectangle {
-                width: 28; height: 28; radius: 5
+                width: 28; height: 28; radius: 6
                 color: zInHov.containsMouse ? root.theme.surface2 : "transparent"
                 border.color: zInHov.containsMouse ? root.theme.border_ : "transparent"
                 border.width: 1
+                scale: zInHov.pressed ? 0.92 : (zInHov.containsMouse ? 1.08 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutBack } }
+
                 Text { anchors.centerIn: parent; text: "+"; font.pixelSize: 14; font.weight: Font.Bold; color: root.theme.textSecondary }
                 MouseArea {
                     id: zInHov; anchors.fill: parent; hoverEnabled: true
@@ -221,17 +223,20 @@ Rectangle {
 
         // ── Theme Mode Toggle Button ──────────────────────────────────────────
         Rectangle {
-            width: 32; height: 32; radius: 6
+            width: 32; height: 32; radius: 8
             color: thmHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
             border.color: thmHov.containsMouse ? root.theme.accent : root.theme.border_
             border.width: 1
-            scale: thmHov.pressed ? 0.94 : (thmHov.containsMouse ? 1.08 : 1.0)
-            Behavior on scale { NumberAnimation { duration: 100 } }
+            scale: thmHov.pressed ? 0.92 : (thmHov.containsMouse ? 1.10 : 1.0)
+            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
 
             Text {
+                id: themeIcon
                 anchors.centerIn: parent
                 text: root.theme.isDark ? "☀️" : "🌙"
                 font.pixelSize: 13
+                rotation: thmHov.containsMouse ? 20 : 0
+                Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
             }
 
             MouseArea {
@@ -243,18 +248,20 @@ Rectangle {
 
         // ── Settings Button ────────────────────────────────────────────────────
         Rectangle {
-            width: 32; height: 32; radius: 6
+            width: 32; height: 32; radius: 8
             color: setHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
             border.color: setHov.containsMouse ? root.theme.accent : root.theme.border_
             border.width: 1
-            scale: setHov.pressed ? 0.94 : (setHov.containsMouse ? 1.08 : 1.0)
-            Behavior on scale { NumberAnimation { duration: 100 } }
+            scale: setHov.pressed ? 0.92 : (setHov.containsMouse ? 1.10 : 1.0)
+            Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
 
-            Text {
+            StudioIcon {
                 anchors.centerIn: parent
-                text: "⚙"
-                font.pixelSize: 14
+                name: "settings"
+                size: 15
                 color: setHov.containsMouse ? root.theme.accent : root.theme.textSecondary
+                rotation: setHov.containsMouse ? 30 : 0
+                Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutBack } }
             }
 
             MouseArea {

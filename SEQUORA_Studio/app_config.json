@@ -1,0 +1,7 @@
+{
+  "theme": "light",
+  "zoomLevel": 1,
+  "dryRun": true,
+  "backupEnabled": true,
+  "autoExportReport": true
+}

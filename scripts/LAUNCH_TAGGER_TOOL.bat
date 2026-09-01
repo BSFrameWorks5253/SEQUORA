@@ -1,12 +1,12 @@
 @echo off
 setlocal enabledelayedexpansion
-title SEQUORA — Clean JPG Extension Normalizer Tool
-cd /d "%~dp0"
+title SEQUORA — Video Thumbnail Suffix Tool (_V)
+cd /d "%~dp0.."
 
 echo ===============================================================================
-echo  SEQUORA — Clean JPG Extension Normalizer Tool
+echo  SEQUORA — Video Thumbnail Suffix Tool (_V)
 echo ===============================================================================
 echo.
 
-cd "tools\Extension_Normalizer_Tool"
-call START_TOOL.bat %*
+cd "tools\Video_Thumbnail_Tagger_V"
+call START_TOOL.bat

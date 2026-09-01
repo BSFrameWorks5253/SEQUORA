@@ -87,14 +87,34 @@ class PhotoMatcherEngineWrapper(QObject):
         super().__init__(parent)
         self._scanning = False
         self._renaming = False
+        self._config_file = SCRIPT_DIR / "app_config.json"
         self._config = {
             "theme": "dark",
+            "zoomLevel": 1.0,
             "dryRun": True,
             "backupEnabled": True,
             "autoExportReport": True
         }
+        self.load_config()
         self._last_scan_result = None
         self._last_path = ""
+
+    def load_config(self):
+        if self._config_file.exists():
+            try:
+                with open(self._config_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        self._config.update(data)
+            except Exception as e:
+                print(f"Notice: loading app config: {e}")
+
+    def save_config_file(self):
+        try:
+            with open(self._config_file, "w", encoding="utf-8") as f:
+                json.dump(self._config, f, indent=2)
+        except Exception as e:
+            print(f"Notice: saving app config: {e}")
 
     @Property(bool, notify=scanningChanged)
     def scanning(self):
@@ -111,6 +131,7 @@ class PhotoMatcherEngineWrapper(QObject):
     @Slot(str)
     def setConfigTheme(self, theme_name):
         self._config["theme"] = theme_name
+        self.save_config_file()
         self.configChanged.emit()
 
     @Slot("QVariant")
@@ -118,6 +139,7 @@ class PhotoMatcherEngineWrapper(QObject):
         new_config = to_py_variant(new_config)
         if isinstance(new_config, dict):
             self._config.update(new_config)
+            self.save_config_file()
             self.configChanged.emit()
 
     @Slot(str)
@@ -642,6 +664,14 @@ class VideoTransferEngineWrapper(QObject):
         return None
 
     @Slot("QVariant")
+    def scan(self, params):
+        self.scanFolder(params)
+
+    @Slot(str, str)
+    def scan(self, video_dir, photo_dir):
+        self.scanFolder({"videoFolderPath": video_dir, "photoFolderPath": photo_dir})
+
+    @Slot("QVariant")
     def scanFolder(self, params):
         params = to_py_variant(params)
         v_path = ""
@@ -970,6 +1000,8 @@ class VideoTransferEngineWrapper(QObject):
                     photo_folders_by_date.setdefault(d_name, []).append(item)
                     all_pf_list.append(item)
                 photo_folders_by_date["All Folders"] = all_pf_list
+                self._matched = matched
+                self._unmatched = unmatched
                 self.matchedItemsChanged.emit(matched)
                 self.unmatchedItemsChanged.emit(unmatched)
                 self.dateFoldersChanged.emit(date_folders)
@@ -984,6 +1016,74 @@ class VideoTransferEngineWrapper(QObject):
                 self.scanningChanged.emit()
 
         threading.Thread(target=scan_worker, daemon=True).start()
+
+    @Slot(str, str)
+    def linkVideoToPhotoFolder(self, video_path, photo_folder_path):
+        """
+        Manually links an unmatched video clip (or re-links an existing clip)
+        to a specified photo subfolder.
+        """
+        clean_v = os.path.abspath(video_path.replace("file:///", "").strip())
+        clean_p = os.path.abspath(photo_folder_path.replace("file:///", "").strip())
+
+        vid_item = None
+        new_unmatched = []
+        for u in self._unmatched:
+            u_path = os.path.abspath(u.get("videoPath", "").replace("file:///", "").strip())
+            if u_path == clean_v:
+                vid_item = u
+            else:
+                new_unmatched.append(u)
+
+        if not vid_item:
+            for m in self._matched:
+                m_path = os.path.abspath(m.get("videoPath", "").replace("file:///", "").strip())
+                if m_path == clean_v:
+                    vid_item = m
+                    break
+
+        if not vid_item:
+            v_name = os.path.basename(clean_v)
+            vid_item = {
+                "videoPath": clean_v,
+                "videoName": v_name,
+                "dateFolderName": os.path.basename(os.path.dirname(clean_v)),
+                "parsed": self.parse_sequence_name(v_name),
+                "prefix": "",
+                "namePart": v_name
+            }
+
+        p_name = os.path.basename(clean_p)
+        v_thumb = self.find_video_thumbnail(clean_v)
+        p_thumb = self.find_photo_thumbnail(clean_p, clean_v)
+
+        # Remove previous match for this video
+        new_matched = [m for m in self._matched if os.path.abspath(m.get("videoPath", "").replace("file:///", "").strip()) != clean_v]
+
+        new_matched.append({
+            "id": f"{clean_v}_{clean_p}",
+            "videoPath": clean_v,
+            "videoName": vid_item.get("videoName", os.path.basename(clean_v)),
+            "thumbnailPath": v_thumb["path"] if v_thumb else vid_item.get("thumbnailPath", ""),
+            "thumbnailName": v_thumb["name"] if v_thumb else vid_item.get("thumbnailName", ""),
+            "videoThumbnailPath": v_thumb["path"] if v_thumb else vid_item.get("videoThumbnailPath", ""),
+            "videoThumbnailName": v_thumb["name"] if v_thumb else vid_item.get("videoThumbnailName", ""),
+            "photoThumbnailPath": p_thumb["path"] if p_thumb else "",
+            "photoThumbnailName": p_thumb["name"] if p_thumb else "",
+            "photoFolderPath": clean_p,
+            "photoFolderName": p_name,
+            "dateFolderName": vid_item.get("dateFolderName") or os.path.basename(os.path.dirname(clean_p)),
+            "sequence": vid_item.get("sequence", ""),
+            "prefix": vid_item.get("prefix", ""),
+            "namePart": vid_item.get("namePart", ""),
+            "status": "APPROVED",
+            "isMatched": True
+        })
+
+        self._unmatched = new_unmatched
+        self._matched = new_matched
+        self.matchedItemsChanged.emit(self._matched)
+        self.unmatchedItemsChanged.emit(self._unmatched)
 
     @Slot(str, str, str)
     def scanDirectories(self, video_dir, photo_dir, master_dir=""):
@@ -1682,6 +1782,262 @@ class PVSeparatorEngineWrapper(QObject):
         threading.Thread(target=_worker, daemon=True).start()
 
 
+class ThumbnailSeparatorEngineWrapper(QObject):
+    scanningChanged = Signal()
+    processingChanged = Signal()
+    scanCompleted = Signal("QVariant")
+    progress = Signal("QVariant")
+    processingCompleted = Signal("QVariant")
+    error = Signal(str)
+
+    THUMBNAIL_EXTS = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff'}
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._scanning = False
+        self._processing = False
+        self._active_scan_cache = None
+
+    @Property(bool, notify=scanningChanged)
+    def scanning(self):
+        return self._scanning
+
+    @Property(bool, notify=processingChanged)
+    def isProcessing(self):
+        return self._processing
+
+    @Slot(str)
+    def scan(self, source_dir):
+        self.scanFolder(source_dir)
+
+    @Slot(str)
+    def scanFolder(self, source_dir):
+        if not source_dir:
+            self.error.emit("Please select a valid source directory.")
+            return
+
+        clean_path = os.path.abspath(os.path.normpath(source_dir.replace("file:///", "").strip()))
+        if not os.path.isdir(clean_path):
+            self.error.emit(f"Source directory does not exist: {clean_path}")
+            return
+
+        self._scanning = True
+        self.scanningChanged.emit()
+
+        def _worker():
+            try:
+                items = []
+                p_count = 0
+                v_count = 0
+                total_bytes = 0
+
+                for root_dir, dirs, files in os.walk(clean_path):
+                    for f in files:
+                        ext = os.path.splitext(f)[1].lower()
+                        if ext in self.THUMBNAIL_EXTS:
+                            stem = os.path.splitext(f)[0]
+                            # Match if stem ends with _p or _v (case-insensitive)
+                            is_p = bool(re.search(r'_[pP]$', stem))
+                            is_v = bool(re.search(r'_[vV]$', stem))
+
+                            if is_p or is_v:
+                                full_p = os.path.join(root_dir, f)
+                                rel_p = os.path.relpath(full_p, clean_path)
+                                rel_d = os.path.dirname(rel_p)
+                                if rel_d == ".":
+                                    rel_d = ""
+
+                                try:
+                                    sz = os.path.getsize(full_p)
+                                except Exception:
+                                    sz = 0
+
+                                total_bytes += sz
+                                if is_p:
+                                    p_count += 1
+                                    t_type = "photo"
+                                    t_label = "_P Photo Thumb"
+                                else:
+                                    v_count += 1
+                                    t_type = "video"
+                                    t_label = "_V Video Thumb"
+
+                                items.append({
+                                    "filename": f,
+                                    "stem": stem,
+                                    "ext": ext,
+                                    "type": t_type,
+                                    "typeLabel": t_label,
+                                    "sourcePath": full_p,
+                                    "relPath": rel_p,
+                                    "relDir": rel_d,
+                                    "sizeBytes": sz,
+                                    "status": "READY"
+                                })
+
+                res = {
+                    "sourceDir": clean_path,
+                    "totalThumbnails": len(items),
+                    "pCount": p_count,
+                    "vCount": v_count,
+                    "totalBytes": total_bytes,
+                    "items": items
+                }
+                self._active_scan_cache = res
+                self.scanCompleted.emit(res)
+            except Exception as e:
+                self.error.emit(f"Scan failed: {str(e)}")
+            finally:
+                self._scanning = False
+                self.scanningChanged.emit()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    @Slot(str, str, str, "QVariant")
+    def executeTransfer(self, source_dir, dest_dir, action_mode="copy", selected_items=None):
+        if not source_dir or not dest_dir:
+            self.error.emit("Source and destination directories are required.")
+            return
+
+        clean_src = os.path.abspath(os.path.normpath(source_dir.replace("file:///", "").strip()))
+        clean_dest = os.path.abspath(os.path.normpath(dest_dir.replace("file:///", "").strip()))
+
+        if not os.path.isdir(clean_src):
+            self.error.emit(f"Source directory does not exist: {clean_src}")
+            return
+
+        os.makedirs(clean_dest, exist_ok=True)
+
+        selected_items = to_py_variant(selected_items)
+        if selected_items is None and self._active_scan_cache:
+            selected_items = self._active_scan_cache.get("items", [])
+
+        if not selected_items:
+            self.error.emit("No thumbnail files selected to process.")
+            return
+
+        self._processing = True
+        self.processingChanged.emit()
+
+        def _worker():
+            total = len(selected_items)
+            done = 0
+            success_count = 0
+            error_count = 0
+            total_bytes_transferred = 0
+            start_time = time.time()
+            transferred_records = []
+            errors = []
+
+            mode = action_mode.lower().strip()
+
+            for item in selected_items:
+                src_path = item.get("sourcePath") or os.path.join(clean_src, item.get("relPath", ""))
+                rel_dir = item.get("relDir", "")
+                filename = item.get("filename", os.path.basename(src_path))
+
+                target_dir = os.path.join(clean_dest, rel_dir) if rel_dir else clean_dest
+                target_path = os.path.join(target_dir, filename)
+
+                try:
+                    if not os.path.exists(src_path):
+                        raise FileNotFoundError(f"Source file not found: {src_path}")
+
+                    os.makedirs(target_dir, exist_ok=True)
+                    f_size = os.path.getsize(src_path)
+
+                    if mode == "move":
+                        shutil.move(src_path, target_path)
+                    else:
+                        shutil.copy2(src_path, target_path)
+
+                    total_bytes_transferred += f_size
+                    success_count += 1
+
+                    transferred_records.append({
+                        "filename": filename,
+                        "type": item.get("type", ""),
+                        "sourcePath": src_path,
+                        "targetPath": target_path,
+                        "relDir": rel_dir,
+                        "mode": mode.upper(),
+                        "status": "SUCCESS"
+                    })
+                except Exception as ex:
+                    error_count += 1
+                    err_msg = str(ex)
+                    errors.append({"file": filename, "error": err_msg})
+                    transferred_records.append({
+                        "filename": filename,
+                        "type": item.get("type", ""),
+                        "sourcePath": src_path,
+                        "targetPath": target_path,
+                        "relDir": rel_dir,
+                        "mode": mode.upper(),
+                        "status": f"ERROR: {err_msg}"
+                    })
+
+                done += 1
+                elapsed = time.time() - start_time
+                speed_bps = total_bytes_transferred / elapsed if elapsed > 0 else 0
+                speed_mbps = round(speed_bps / (1024 * 1024), 2)
+                eta_sec = int((total - done) / (done / elapsed)) if done > 0 and elapsed > 0 else 0
+
+                self.progress.emit({
+                    "current": done,
+                    "total": total,
+                    "current_file": filename,
+                    "speed_mbps": speed_mbps,
+                    "eta_sec": eta_sec,
+                    "log_entry": f"[{mode.upper()}] {filename} -> {rel_dir or '.'}",
+                    "log_type": "success" if not errors else "info"
+                })
+
+            duration_sec = round(time.time() - start_time, 2)
+            avg_speed_mbps = round((total_bytes_transferred / max(duration_sec, 0.001)) / (1024 * 1024), 2)
+
+            # Auto-export CSV Report to Document folder inside dest_dir
+            doc_dir = os.path.join(clean_dest, "Document")
+            os.makedirs(doc_dir, exist_ok=True)
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            csv_path = os.path.join(doc_dir, f"Thumbnail_Separation_Report_{ts}.csv")
+
+            try:
+                with open(csv_path, "w", newline="", encoding="utf-8-sig") as f_csv:
+                    writer = csv.writer(f_csv)
+                    writer.writerow(["SR NO", "FILENAME", "TYPE", "MODE", "REL DIRECTORY", "TARGET PATH", "STATUS", "TIMESTAMP"])
+                    for idx, rec in enumerate(transferred_records, 1):
+                        writer.writerow([
+                            idx,
+                            rec.get("filename", ""),
+                            rec.get("type", ""),
+                            rec.get("mode", ""),
+                            rec.get("relDir", ""),
+                            rec.get("targetPath", ""),
+                            rec.get("status", ""),
+                            time.strftime("%Y-%m-%d %H:%M:%S")
+                        ])
+            except Exception as e_csv:
+                print(f"Thumbnail report CSV error: {e_csv}")
+
+            res = {
+                "success_count": success_count,
+                "error_count": error_count,
+                "total_bytes": total_bytes_transferred,
+                "elapsed_sec": duration_sec,
+                "avg_speed_mbps": avg_speed_mbps,
+                "report_csv": csv_path,
+                "dest_dir": clean_dest,
+                "errors": errors
+            }
+
+            self.processingCompleted.emit(res)
+            self._processing = False
+            self.processingChanged.emit()
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+
 class RemainingPhotosCollectorEngineWrapper(QObject):
     scanningChanged = Signal()
     shiftingChanged = Signal()
@@ -1725,6 +2081,10 @@ class RemainingPhotosCollectorEngineWrapper(QObject):
     def progressStr(self): return self._progressStr
 
     @Slot(str)
+    def scan(self, source_dir):
+        self.scanFolders(source_dir)
+
+    @Slot(str)
     def scanFolders(self, source_dir):
         if not source_dir:
             self.error.emit("Please select a valid main source folder.")
@@ -1737,84 +2097,266 @@ class RemainingPhotosCollectorEngineWrapper(QObject):
 
         self._scanning = True
         self.scanningChanged.emit()
-        QApplication.processEvents()
 
-        found_items = []
-        date_folders_set = set()
-        total_photos_count = 0
-        total_bytes = 0
+        def _scan_worker():
+            found_items = []
+            date_folders_set = set()
+            total_photos_count = 0
+            total_bytes = 0
+            processed_roots = set()
 
-        try:
-            for root, dirs, files in os.walk(clean_path):
-                folder_name = os.path.basename(root).strip()
-                f_lower = folder_name.lower()
-                # Match folder named "remaining photos", "remaining", "remaining_photos", "rem photos", etc.
-                if f_lower in {"remaining photos", "remaining", "remaining_photos", "rem photos", "remaining photo", "rem"} or ("remaining" in f_lower and "photo" in f_lower):
-                    parent_date_folder = os.path.basename(os.path.dirname(root)).strip()
-                    if not parent_date_folder or parent_date_folder == os.path.basename(clean_path):
-                        parent_date_folder = folder_name
+            def is_remaining_folder(name):
+                n = name.lower().strip()
+                if 'remain' in n:
+                    return True
+                if re.search(r'(?:^|[\s_\-])rem(?:aining)?(?:[\s_\-]|photos?|$)', n):
+                    return True
+                return False
 
-                    date_folders_set.add(parent_date_folder)
+            def extract_date_folder_name(full_path, base_root):
+                rel = os.path.relpath(full_path, base_root)
+                parts = [p for p in rel.replace('\\', '/').split('/') if p and p != '.']
+                for part in parts[:-1]:
+                    if re.search(r'\d{4}[-_.]\d{2}[-_.]\d{2}', part) or re.search(r'\d{2}[-_.]\d{2}[-_.]\d{4}', part) or re.match(r'^(?:day|date|event|session)[\s_\-]*\d+', part, re.I):
+                        return part
+                if len(parts) > 1:
+                    return parts[0]
+                return os.path.basename(os.path.dirname(full_path)) or os.path.basename(base_root)
 
-                    # Count photos & size inside this remaining folder recursively
-                    photo_count = 0
-                    folder_size = 0
-                    for sub_root, _, sub_files in os.walk(root):
-                        for f in sub_files:
-                            ext = os.path.splitext(f)[1].lower()
-                            if ext in self.IMAGE_EXTS:
-                                photo_count += 1
-                            fp = os.path.join(sub_root, f)
-                            try:
-                                folder_size += os.path.getsize(fp)
-                            except Exception:
-                                pass
+            try:
+                for root, dirs, files in os.walk(clean_path):
+                    # Skip if inside an already processed remaining folder
+                    if any(root.startswith(pr + os.sep) for pr in processed_roots):
+                        continue
 
-                    total_photos_count += photo_count
-                    total_bytes += folder_size
+                    folder_name = os.path.basename(root).strip()
+                    if is_remaining_folder(folder_name):
+                        processed_roots.add(root)
+                        parent_date_folder = extract_date_folder_name(root, clean_path)
+                        date_folders_set.add(parent_date_folder)
 
-                    # Format size
-                    if folder_size > 1024 * 1024 * 1024:
-                        size_str = f"{folder_size / (1024**3):.2f} GB"
-                    else:
-                        size_str = f"{folder_size / (1024**2):.1f} MB"
+                        photo_count = 0
+                        folder_size = 0
+                        for sub_root, _, sub_files in os.walk(root):
+                            for f in sub_files:
+                                ext = os.path.splitext(f)[1].lower()
+                                if ext in self.IMAGE_EXTS:
+                                    photo_count += 1
+                                fp = os.path.join(sub_root, f)
+                                try:
+                                    folder_size += os.path.getsize(fp)
+                                except Exception:
+                                    pass
 
-                    rel = os.path.relpath(root, clean_path)
+                        total_photos_count += photo_count
+                        total_bytes += folder_size
 
-                    found_items.append({
-                        "dateFolder": parent_date_folder,
-                        "relPath": rel,
-                        "fullPath": root,
-                        "photoCount": photo_count,
-                        "sizeBytes": folder_size,
-                        "sizeStr": size_str
-                    })
+                        if folder_size > 1024 * 1024 * 1024:
+                            size_str = f"{folder_size / (1024**3):.2f} GB"
+                        else:
+                            size_str = f"{folder_size / (1024**2):.1f} MB"
 
-            # Total size string
-            if total_bytes > 1024 * 1024 * 1024:
-                total_size_str = f"{total_bytes / (1024**3):.2f} GB"
-            else:
-                total_size_str = f"{total_bytes / (1024**2):.1f} MB"
+                        rel = os.path.relpath(root, clean_path)
 
-            result = {
-                "success": True,
-                "items": found_items,
-                "totalFolders": len(found_items),
-                "totalDateFolders": len(date_folders_set),
-                "totalPhotos": total_photos_count,
-                "totalSizeBytes": total_bytes,
-                "totalSizeStr": total_size_str,
-                "sourceDir": clean_path
-            }
-            self.scanCompleted.emit(result)
-        except Exception as e:
-            self.error.emit(f"Scan failed: {str(e)}")
-        finally:
-            self._scanning = False
-            self.scanningChanged.emit()
+                        found_items.append({
+                            "date": parent_date_folder,
+                            "dateFolder": parent_date_folder,
+                            "dateFolderName": parent_date_folder,
+                            "folderName": folder_name,
+                            "relPath": rel,
+                            "fullPath": root,
+                            "photoCount": photo_count,
+                            "fileCount": photo_count,
+                            "files": photo_count,
+                            "sizeBytes": folder_size,
+                            "sizeStr": size_str,
+                            "size": size_str,
+                            "status": "Ready"
+                        })
 
-    @Slot(dict)
-    def _create_excel_report(self, target_dir, source_dir, mode, shifted_items, total_items, succ_count, fail_count):
+                if total_bytes > 1024 * 1024 * 1024:
+                    total_size_str = f"{total_bytes / (1024**3):.2f} GB"
+                else:
+                    total_size_str = f"{total_bytes / (1024**2):.1f} MB"
+
+                result = {
+                    "success": True,
+                    "items": found_items,
+                    "folders": found_items,
+                    "manifest": found_items,
+                    "totalFolders": len(found_items),
+                    "total_folders": len(found_items),
+                    "totalDateFolders": len(date_folders_set),
+                    "totalPhotos": total_photos_count,
+                    "total_photos": total_photos_count,
+                    "totalSizeBytes": total_bytes,
+                    "totalSizeStr": total_size_str,
+                    "sourceDir": clean_path
+                }
+                self._last_scanned_items = found_items
+                self.scanCompleted.emit(result)
+            except Exception as e:
+                self.error.emit(f"Scan failed: {str(e)}")
+            finally:
+                self._scanning = False
+                self.scanningChanged.emit()
+
+        threading.Thread(target=_scan_worker, daemon=True).start()
+
+    @Slot(str, str)
+    def shift(self, source_dir, dest_dir):
+        self.shift(source_dir, dest_dir, "move")
+
+    @Slot(str, str, str)
+    def shift(self, source_dir, dest_dir, mode="move"):
+        items = getattr(self, '_last_scanned_items', [])
+        self.executeShift({
+            "sourceDir": source_dir,
+            "targetDir": dest_dir,
+            "mode": mode,
+            "items": items
+        })
+
+    @Slot("QVariant")
+    def executeShift(self, payload):
+        payload = to_py_variant(payload)
+        source_dir = payload.get("sourceDir", "") if isinstance(payload, dict) else ""
+        target_dir = payload.get("targetDir", "") if isinstance(payload, dict) else ""
+        mode = payload.get("mode", "move") if isinstance(payload, dict) else "move"
+        items = payload.get("items", []) if isinstance(payload, dict) else []
+
+        if not items and hasattr(self, '_last_scanned_items') and self._last_scanned_items:
+            items = self._last_scanned_items
+
+        if not target_dir:
+            self.error.emit("Please select a target destination folder.")
+            return
+
+        tgt_clean = os.path.abspath(os.path.normpath(target_dir.replace("file:///", "").strip()))
+        os.makedirs(tgt_clean, exist_ok=True)
+
+        self._shifting = True
+        self.shiftingChanged.emit()
+
+        def _shift_worker():
+            succ = 0
+            fail = 0
+            shifted_manifest_items = []
+            total = len(items)
+
+            try:
+                for i, itm in enumerate(items):
+                    src_full = itm.get("fullPath", "")
+                    date_folder = itm.get("dateFolder", "Remaining Photos")
+                    photo_count = itm.get("photoCount", 0)
+                    size_bytes = itm.get("sizeBytes", 0)
+                    size_str = itm.get("sizeStr", "0 MB")
+
+                    self._currentFolder = f"{date_folder} ({src_full})"
+                    self._shiftPercent = int(((i + 1) / max(total, 1)) * 100)
+                    self._progressStr = f"{i + 1} of {total} folders"
+                    self.currentFolderChanged.emit()
+                    self.shiftPercentChanged.emit()
+                    self.progressStrChanged.emit()
+                    self.shiftProgress.emit(i + 1, total, self._shiftPercent, self._currentFolder)
+
+                    if not os.path.exists(src_full):
+                        fail += 1
+                        shifted_manifest_items.append({
+                            "originalPath": src_full,
+                            "newPath": "",
+                            "dateFolder": date_folder,
+                            "photoCount": photo_count,
+                            "sizeBytes": size_bytes,
+                            "sizeStr": size_str,
+                            "status": "Failed",
+                            "error": "Source folder not found"
+                        })
+                        continue
+
+                    # Target directory named after the Date folder
+                    dest_dir = os.path.join(tgt_clean, date_folder)
+                    
+                    # If destination already exists, resolve collision
+                    final_dest = dest_dir
+                    if os.path.exists(final_dest) and os.path.abspath(final_dest) != os.path.abspath(src_full):
+                        counter = 1
+                        while os.path.exists(final_dest):
+                            final_dest = f"{dest_dir}_{counter}"
+                            counter += 1
+
+                    try:
+                        if mode == "move":
+                            shutil.move(src_full, final_dest)
+                        else:
+                            shutil.copytree(src_full, final_dest, dirs_exist_ok=True)
+
+                        succ += 1
+                        shifted_manifest_items.append({
+                            "originalPath": src_full,
+                            "newPath": final_dest,
+                            "dateFolder": date_folder,
+                            "photoCount": photo_count,
+                            "sizeBytes": size_bytes,
+                            "sizeStr": size_str,
+                            "status": "Success",
+                            "error": ""
+                        })
+                    except Exception as ex:
+                        print(f"Error shifting {src_full}: {ex}")
+                        fail += 1
+                        shifted_manifest_items.append({
+                            "originalPath": src_full,
+                            "newPath": final_dest,
+                            "dateFolder": date_folder,
+                            "photoCount": photo_count,
+                            "sizeBytes": size_bytes,
+                            "sizeStr": size_str,
+                            "status": "Failed",
+                            "error": str(ex)
+                        })
+
+                # 1. Create document folder and excel report
+                doc_dir, excel_report_path = self._create_excel_report(
+                    tgt_clean, source_dir, mode, shifted_manifest_items, total, succ, fail
+                )
+
+                # 2. Save JSON Manifest
+                manifest_path = os.path.join(tgt_clean, "remaining_shift_manifest.json")
+                try:
+                    manifest_data = {
+                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "sourceDir": source_dir,
+                        "targetDir": tgt_clean,
+                        "documentFolder": doc_dir,
+                        "excelReportPath": excel_report_path,
+                        "mode": mode,
+                        "totalItems": len(shifted_manifest_items),
+                        "items": shifted_manifest_items
+                    }
+                    with open(manifest_path, "w", encoding="utf-8") as f:
+                        json.dump(manifest_data, f, indent=2)
+                except Exception:
+                    manifest_path = ""
+
+                self.shiftCompleted.emit({
+                    "success": True,
+                    "successful": succ,
+                    "failed": fail,
+                    "total": total,
+                    "manifestPath": manifest_path,
+                    "documentFolder": doc_dir,
+                    "excelReportPath": excel_report_path,
+                    "shifted_folders": succ,
+                    "shifted_photos": sum(itm.get("photoCount", 0) for itm in shifted_manifest_items if itm.get("status") == "Success")
+                })
+            except Exception as e:
+                self.error.emit(f"Shift execution failed: {str(e)}")
+            finally:
+                self._shifting = False
+                self.shiftingChanged.emit()
+
+        threading.Thread(target=_shift_worker, daemon=True).start()
         # 1. Resolve or create 'document' folder inside target directory
         doc_dir = None
         if os.path.exists(target_dir):
@@ -2176,8 +2718,15 @@ class NativeDialogsWrapper(QObject):
         super().__init__(parent)
 
     @Slot(str, result=str)
-    def selectDirectory(self, title):
-        path = QFileDialog.getExistingDirectory(None, title)
+    @Slot(str, str, result=str)
+    def selectDirectory(self, title="Select Directory", start_dir=""):
+        path = QFileDialog.getExistingDirectory(None, title, start_dir or "")
+        return path or ""
+
+    @Slot(str, result=str)
+    @Slot(str, str, result=str)
+    def chooseDirectory(self, title="Select Directory", start_dir=""):
+        path = QFileDialog.getExistingDirectory(None, title, start_dir or "")
         return path or ""
 
     @Slot(str, str, result=str)
@@ -2743,6 +3292,7 @@ def main():
     photo_engine = PhotoMatcherEngineWrapper()
     video_engine = VideoTransferEngineWrapper()
     pv_engine = PVSeparatorEngineWrapper()
+    thumb_sep_engine = ThumbnailSeparatorEngineWrapper()
     remaining_engine = RemainingPhotosCollectorEngineWrapper()
     excel_merger_engine = ExcelMergerEngineWrapper()
     drive_engine = GoogleDriveManagerWrapper()
@@ -2791,6 +3341,18 @@ def main():
             activity_engine.logReport("PV Separator", str(c), "Photos separated and moved to destination", str(dest))
     pv_engine.processingCompleted.connect(on_pv_extract)
 
+    def on_thumb_sep(res):
+        c = res.get("success_count", 0) if isinstance(res, dict) else 0
+        dest = res.get("dest_dir", "") if isinstance(res, dict) else ""
+        activity_engine.logActivity(
+            "Thumbnail Shifter", "Thumbnails separated",
+            f"{c} thumbnails (_P/_V) organized by folder structure",
+            "#06B6D4", "#F0F9FF"
+        )
+        if dest:
+            activity_engine.logReport("Thumbnail Shifter", str(c), "Thumbnails shifted by folder structure", str(dest))
+    thumb_sep_engine.processingCompleted.connect(on_thumb_sep)
+
     def on_remaining_shift(res):
         fc = res.get("shifted_folders", 0) if isinstance(res, dict) else 0
         activity_engine.logActivity(
@@ -2818,7 +3380,8 @@ def main():
     engine.rootContext().setContextProperty("photoEngine", photo_engine)
     engine.rootContext().setContextProperty("videoEngine", video_engine)
     engine.rootContext().setContextProperty("pvSeparatorEngine", pv_engine)
-    engine.rootContext().setContextProperty("thumbEngine", pv_engine)
+    engine.rootContext().setContextProperty("thumbSeparatorEngine", thumb_sep_engine)
+    engine.rootContext().setContextProperty("thumbEngine", thumb_sep_engine)
     engine.rootContext().setContextProperty("remainingEngine", remaining_engine)
     engine.rootContext().setContextProperty("excelMergerEngine", excel_merger_engine)
     engine.rootContext().setContextProperty("driveEngine", drive_engine)

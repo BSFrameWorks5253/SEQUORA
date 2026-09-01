@@ -13,6 +13,14 @@ Rectangle {
     signal navigate(string pageKey)
     signal openSettings()
 
+    property var toolsModel: [
+        { key: "photoMatcher",       icon: "photo",   label: "Photo Matcher",       color: "#8B5CF6", bgSoft: "#F3EEFC" },
+        { key: "videoTransfer",      icon: "video",   label: "Video Matcher",       color: "#10B981", bgSoft: "#ECFDF5" },
+        { key: "pvSeparator",        icon: "box",     label: "PV Separator",        color: "#06B6D4", bgSoft: "#F0F9FF" },
+        { key: "remainingCollector", icon: "layers",  label: "Remaining Shifter",   color: "#EC4899", bgSoft: "#FDF2F8" },
+        { key: "excelMerger",        icon: "report",  label: "Report Merger",       color: "#F59E0B", bgSoft: "#FFFBEB" }
+    ]
+
     width: 236
     Layout.fillHeight: true
     color: root.theme.sidebar
@@ -29,10 +37,10 @@ Rectangle {
         anchors.fill: parent
         spacing: 0
 
-        // ── Brand Wordmark Header ─────────────────────────────────────────────
+        // ── Brand Wordmark Header with Glowing Emblem ─────────────────────────
         Item {
             Layout.fillWidth: true
-            height: 68
+            height: 72
 
             RowLayout {
                 anchors.fill: parent
@@ -40,39 +48,59 @@ Rectangle {
                 anchors.rightMargin: 16
                 spacing: 12
 
-                // Official SEQUORA App Mark
-                Rectangle {
-                    width: 38
-                    height: 38
-                    radius: 10
-                    color: "transparent"
-                    clip: true
+                // Official SEQUORA App Mark with Glow
+                Item {
+                    width: 44
+                    height: 44
 
-                    Image {
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 48; height: 48; radius: 14
+                        color: Qt.rgba(0.65, 0.35, 1.0, 0.25)
+                        visible: root.theme.isDark
+
+                        SequentialAnimation on opacity {
+                            loops: Animation.Infinite
+                            NumberAnimation { from: 0.2; to: 0.55; duration: 1600; easing.type: Easing.InOutQuad }
+                            NumberAnimation { from: 0.55; to: 0.2; duration: 1600; easing.type: Easing.InOutQuad }
+                        }
+                    }
+
+                    Rectangle {
                         anchors.fill: parent
-                        source: "../assets/icon.png"
-                        fillMode: Image.PreserveAspectFit
-                        mipmap: true
-                        smooth: true
-                        sourceSize: Qt.size(128, 128)
+                        radius: 12
+                        color: root.theme.isDark ? "#12121B" : "#FAF7F2"
+                        border.color: root.theme.border_
+                        border.width: 1
+                        clip: true
+
+                        Image {
+                            anchors.fill: parent
+                            anchors.margins: 3
+                            source: "../assets/icon.png"
+                            fillMode: Image.PreserveAspectFit
+                            mipmap: true
+                            smooth: true
+                        }
                     }
                 }
 
                 ColumnLayout {
-                    spacing: 2
+                    spacing: 1
                     Layout.fillWidth: true
+
                     Text {
                         text: "SEQUORA"
                         font.pixelSize: 15
                         font.weight: Font.Black
-                        font.letterSpacing: 2.0
+                        font.letterSpacing: 2.2
                         color: root.theme.textPrimary
                     }
                     Text {
-                        text: "CREATIVE SUITE"
+                        text: "STUDIO SUITE"
                         font.pixelSize: 9
                         font.weight: Font.Bold
-                        font.letterSpacing: 1.2
+                        font.letterSpacing: 1.4
                         color: root.theme.accent
                     }
                 }
@@ -83,7 +111,7 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 1
-                color: root.theme.border_
+                color: root.theme.borderSubtle
             }
         }
 
@@ -112,14 +140,14 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { key: "overview", icon: "◻", label: "Overview", color: "#6366F1", bgSoft: "#EEF2FF" }
+                        { key: "overview", icon: "grid", label: "Overview", color: "#8B5CF6", bgSoft: "#F3EEFD" }
                     ]
                     delegate: navDelegate
                 }
 
                 // TOOLS
                 Text {
-                    text: "TOOLS"
+                    text: "STUDIO TOOLS"
                     font.pixelSize: 10
                     font.weight: Font.Bold
                     color: root.theme.textMuted
@@ -130,13 +158,7 @@ Rectangle {
                 }
 
                 Repeater {
-                    model: [
-                        { key: "photoMatcher",       icon: "📸", label: "Photo Matcher",       color: "#7C5CBF", bgSoft: "#F3EEFC" },
-                        { key: "videoTransfer",      icon: "🎬", label: "Video Matcher",       color: "#059669", bgSoft: "#ECFDF5" },
-                        { key: "pvSeparator",        icon: "📦", label: "PV Separator",        color: "#D97706", bgSoft: "#FFFBEB" },
-                        { key: "remainingCollector", icon: "📦", label: "Remaining Shifter",   color: "#DB2777", bgSoft: "#FDF2F8" },
-                        { key: "excelMerger",        icon: "📑", label: "Report Merger",       color: "#10B981", bgSoft: "#ECFDF5" }
-                    ]
+                    model: root.toolsModel
                     delegate: navDelegate
                 }
 
@@ -154,8 +176,8 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { key: "googleDriveMain",   icon: "☁️", label: "Main Data Drive",   color: "#0284C7", bgSoft: "#F0F9FF" },
-                        { key: "googleDriveThumbs", icon: "📂", label: "Reference Drive",   color: "#0D9488", bgSoft: "#F0FDFA" }
+                        { key: "googleDriveMain",   icon: "cloud",  label: "Main Data Drive",   color: "#0284C7", bgSoft: "#F0F9FF" },
+                        { key: "googleDriveThumbs", icon: "thumbs", label: "Reference Drive",   color: "#0D9488", bgSoft: "#F0FDFA" }
                     ]
                     delegate: navDelegate
                 }
@@ -174,7 +196,7 @@ Rectangle {
 
                 Repeater {
                     model: [
-                        { key: "activity", icon: "⏱", label: "Activity Log", color: "#8B5CF6", bgSoft: "#F5F3FF" }
+                        { key: "activity", icon: "activity", label: "Activity Log", color: "#8B5CF6", bgSoft: "#F5F3FF" }
                     ]
                     delegate: navDelegate
                 }
@@ -186,15 +208,18 @@ Rectangle {
         // ── Settings Footer ───────────────────────────────────────────────────
         Item {
             Layout.fillWidth: true
-            height: 52
+            height: 54
 
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: 6
-                radius: 6
+                radius: 8
                 color: setHov.containsMouse ? root.theme.surface2 : "transparent"
-                border.color: setHov.containsMouse ? root.theme.border_ : "transparent"
+                border.color: setHov.containsMouse ? root.theme.accent : "transparent"
                 border.width: 1
+
+                scale: setHov.pressed ? 0.98 : (setHov.containsMouse ? 1.02 : 1.0)
+                Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutBack } }
 
                 RowLayout {
                     anchors.fill: parent
@@ -202,12 +227,12 @@ Rectangle {
                     anchors.rightMargin: 14
                     spacing: 10
 
-                    Text {
-                        text: "⚙"
-                        font.pixelSize: 15
+                    StudioIcon {
+                        name: "settings"
+                        size: 16
                         color: setHov.containsMouse ? root.theme.accent : root.theme.textMuted
-                        scale: setHov.containsMouse ? 1.15 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 120 } }
+                        rotation: setHov.containsMouse ? 45 : 0
+                        Behavior on rotation { NumberAnimation { duration: 300; easing.type: Easing.OutBack } }
                     }
 
                     Text {
@@ -233,19 +258,19 @@ Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 height: 1
-                color: root.theme.border_
+                color: root.theme.borderSubtle
             }
         }
     }
 
-    // ── Nav Item Delegate ─────────────────────────────────────────────────────
+    // ── Nav Item Delegate with Spring Glow Pill ───────────────────────────────
     Component {
         id: navDelegate
 
         Item {
             id: navItem
             Layout.fillWidth: true
-            height: 38
+            height: 40
 
             property bool isActive: root.activePage === modelData.key
             property bool isHovered: nHov.containsMouse
@@ -255,29 +280,29 @@ Rectangle {
                 anchors.fill: parent
                 anchors.leftMargin: 8
                 anchors.rightMargin: 8
-                radius: 8
+                radius: 9
 
                 color: navItem.isActive
-                       ? (root.theme.isDark ? Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b, 0.18) : modelData.bgSoft)
+                       ? (root.theme.isDark ? Qt.rgba(0.54, 0.36, 0.96, 0.20) : modelData.bgSoft)
                        : (navItem.isHovered ? root.theme.surface2 : "transparent")
 
                 border.color: navItem.isActive
-                              ? Qt.rgba(modelData.color.r, modelData.color.g, modelData.color.b, root.theme.isDark ? 0.45 : 0.6)
+                              ? (root.theme.isDark ? modelData.color : Qt.rgba(0.54, 0.36, 0.96, 0.5))
                               : (navItem.isHovered ? root.theme.border_ : "transparent")
                 border.width: 1
 
-                scale: navItem.isHovered && !navItem.isActive ? 1.01 : 1.0
+                scale: navItem.isHovered && !navItem.isActive ? 1.02 : 1.0
 
-                Behavior on color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                Behavior on border.color { ColorAnimation { duration: 180; easing.type: Easing.OutCubic } }
-                Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+                Behavior on color { ColorAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on border.color { ColorAnimation { duration: 200; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
 
                 // Solid left color indicator bar on active with smooth slide in
                 Rectangle {
                     visible: navItem.isActive
-                    width: 3
-                    height: 18
-                    radius: 1.5
+                    width: 3.5
+                    height: 20
+                    radius: 2
                     color: modelData.color
                     anchors.left: parent.left
                     anchors.leftMargin: 5
@@ -286,16 +311,19 @@ Rectangle {
 
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 15
+                    anchors.leftMargin: 16
                     anchors.rightMargin: 12
-                    spacing: 10
+                    spacing: 11
 
-                    // Icon with subtle spring scale
-                    Text {
-                        text: modelData.icon
-                        font.pixelSize: 14
+                    // Crisp Vector Icon with spring scale
+                    StudioIcon {
+                        name: modelData.icon
+                        size: 16
+                        color: navItem.isActive
+                               ? modelData.color
+                               : (navItem.isHovered ? root.theme.textPrimary : root.theme.textSecondary)
                         scale: navItem.isHovered || navItem.isActive ? 1.15 : 1.0
-                        Behavior on scale { NumberAnimation { duration: 150; easing.type: Easing.OutBack } }
+                        Behavior on scale { NumberAnimation { duration: 180; easing.type: Easing.OutBack } }
                     }
 
                     Text {
@@ -309,12 +337,12 @@ Rectangle {
                         Behavior on color { ColorAnimation { duration: 150 } }
                     }
 
-                    // Chevron on active
+                    // Active Chevron
                     Text {
                         visible: navItem.isActive
                         text: "›"
-                        font.pixelSize: 15
-                        font.weight: Font.Bold
+                        font.pixelSize: 16
+                        font.weight: Font.Black
                         color: modelData.color
                     }
                 }

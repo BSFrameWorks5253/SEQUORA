@@ -27,19 +27,29 @@ Item {
         target: root.engine
         ignoreUnknownSignals: true
 
-        function onScanStarted() { root.isScanning = true; root.progressVal = 0.0 }
-        function onScanProgress(current, total, filename) {
-            root.progressVal = total > 0 ? (current / total) : 0.0
-            root.currentFileMsg = filename
+        function onScanningChanged() {
+            if (root.engine) root.isScanning = root.engine.scanning
         }
-        function onScanFinished(items) {
-            root.isScanning = false
-            root.manifest = items || []
-            toast.show("Found " + (items ? items.length : 0) + " date folders with remaining photos.", "success")
+        function onShiftingChanged() {
+            if (root.engine) root.isShifting = root.engine.shifting
         }
-        function onShiftFinished(count) {
-            root.isShifting = false
-            toast.show("✅ " + count + " remaining photo folders consolidated successfully.", "success")
+        function onScanCompleted(res) {
+            root.manifest = (res && res.items) ? res.items : ((res && res.folders) ? res.folders : (Array.isArray(res) ? res : []))
+            var totalP = (res && res.totalPhotos !== undefined) ? res.totalPhotos : ((res && res.total_photos !== undefined) ? res.total_photos : 0)
+            toast.show("Found " + root.manifest.length + " remaining folders with " + totalP + " remaining photos.", "success")
+        }
+        function onShiftProgress(curr, tot, pct, curFold) {
+            root.progressVal = tot > 0 ? (curr / tot) : (pct / 100.0)
+            root.currentFileMsg = curFold || ""
+        }
+        function onShiftCompleted(res) {
+            var shiftedF = (res && res.shifted_folders) !== undefined ? res.shifted_folders : 0
+            var shiftedP = (res && res.shifted_photos) !== undefined ? res.shifted_photos : 0
+            toast.show("✅ " + shiftedF + " remaining folders (" + shiftedP + " photos) consolidated successfully.", "success")
+            if (root.engine && root.sourceDir) root.engine.scan(root.sourceDir)
+        }
+        function onError(msg) {
+            toast.show(msg, "danger")
         }
     }
 
@@ -122,17 +132,18 @@ Item {
                                 }
                             }
 
-                            Rectangle {
-                                width: 80; height: 36; radius: 6
-                                color: sChgHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
-                                border.color: root.theme.border_; border.width: 1
-                                Text { anchors.centerIn: parent; text: "Change"; font.pixelSize: 12; font.weight: Font.DemiBold; color: root.theme.textPrimary }
-                                MouseArea {
-                                    id: sChgHov; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (root.dialogs) {
-                                            var c = root.dialogs.chooseDirectory("Select Source Directory", root.sourceDir)
-                                            if (c) root.sourceDir = c
+                            StudioButton {
+                                text: "Browse"
+                                iconText: "📂"
+                                variant: "glass"
+                                btnSize: "md"
+                                theme: root.theme
+                                onClicked: {
+                                    if (root.dialogs) {
+                                        var c = root.dialogs.selectDirectory("Select Source Directory", root.sourceDir)
+                                        if (c) {
+                                            root.sourceDir = c
+                                            if (root.engine) root.engine.scan(c)
                                         }
                                     }
                                 }
@@ -153,8 +164,8 @@ Item {
 
                             Rectangle {
                                 Layout.fillWidth: true
-                                height: 36
-                                radius: 6
+                                height: 38
+                                radius: 8
                                 color: root.theme.surfaceElevated
                                 border.color: root.theme.border_
                                 border.width: 1
@@ -176,18 +187,16 @@ Item {
                                 }
                             }
 
-                            Rectangle {
-                                width: 80; height: 36; radius: 6
-                                color: dChgHov.containsMouse ? root.theme.surface2 : root.theme.surfaceElevated
-                                border.color: root.theme.border_; border.width: 1
-                                Text { anchors.centerIn: parent; text: "Change"; font.pixelSize: 12; font.weight: Font.DemiBold; color: root.theme.textPrimary }
-                                MouseArea {
-                                    id: dChgHov; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (root.dialogs) {
-                                            var c = root.dialogs.chooseDirectory("Select Destination Directory", root.destDir)
-                                            if (c) root.destDir = c
-                                        }
+                            StudioButton {
+                                text: "Browse"
+                                iconText: "📂"
+                                variant: "glass"
+                                btnSize: "md"
+                                theme: root.theme
+                                onClicked: {
+                                    if (root.dialogs) {
+                                        var c = root.dialogs.selectDirectory("Select Destination Directory", root.destDir)
+                                        if (c) root.destDir = c
                                     }
                                 }
                             }
@@ -195,26 +204,23 @@ Item {
                     }
 
                     // Scan Action Button
-                    Rectangle {
+                    ColumnLayout {
+                        spacing: 6
                         Layout.alignment: Qt.AlignBottom
-                        width: 100
-                        height: 36
-                        radius: 6
-                        color: shScnHov.containsMouse ? root.theme.accentHover : root.theme.accent
-                        enabled: root.sourceDir !== "" && !root.isScanning
 
-                        Text {
-                            anchors.centerIn: parent
+                        Text { text: "ACTION"; font.pixelSize: 10; font.weight: Font.Bold; color: root.theme.textMuted }
+
+                        StudioButton {
                             text: root.isScanning ? "Scanning..." : "Scan Manifest"
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            color: "#FFFFFF"
-                        }
-
-                        MouseArea {
-                            id: shScnHov; anchors.fill: parent; hoverEnabled: true
-                            cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: if (parent.enabled && root.engine) root.engine.scan(root.sourceDir)
+                            iconText: "⚡"
+                            variant: "primary"
+                            btnSize: "md"
+                            enabled: root.sourceDir !== "" && !root.isScanning
+                            loading: root.isScanning
+                            theme: root.theme
+                            onClicked: {
+                                if (root.engine) root.engine.scan(root.sourceDir)
+                            }
                         }
                     }
                 }
@@ -389,39 +395,23 @@ Item {
 
                 Item { Layout.fillWidth: true }
 
-                Rectangle {
-                    width: 165
-                    height: 38
-                    radius: 6
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0.0; color: sftHov.containsMouse ? "#EC4899" : "#DB2777" }
-                        GradientStop { position: 1.0; color: sftHov.containsMouse ? "#DB2777" : "#BE185D" }
-                    }
-                    enabled: !root.isShifting
-                    scale: sftHov.pressed ? 0.96 : (sftHov.containsMouse ? 1.02 : 1.0)
-                    Behavior on scale { NumberAnimation { duration: 100 } }
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 6
-                        Text { text: "📦"; font.pixelSize: 12 }
-                        Text {
-                            text: root.isShifting ? "Shifting..." : "Start Shift →"
-                            font.pixelSize: 12
-                            font.weight: Font.ExtraBold
-                            color: "#FFFFFF"
-                        }
-                    }
-
-                    MouseArea {
-                        id: sftHov; anchors.fill: parent; hoverEnabled: true
-                        cursorShape: parent.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                        onClicked: {
-                            if (parent.enabled && root.engine) {
-                                root.isShifting = true
-                                root.engine.shift(root.sourceDir, root.destDir)
-                            }
+                StudioButton {
+                    text: root.isShifting ? "Shifting..." : "Start Shift →"
+                    iconText: "📦"
+                    variant: "primary"
+                    btnSize: "md"
+                    enabled: root.manifest.length > 0 && root.destDir !== "" && !root.isShifting
+                    loading: root.isShifting
+                    theme: root.theme
+                    onClicked: {
+                        if (root.engine) {
+                            root.isShifting = true
+                            root.engine.executeShift({
+                                "sourceDir": root.sourceDir,
+                                "targetDir": root.destDir,
+                                "mode": root.transferMode || "move",
+                                "items": root.manifest
+                            })
                         }
                     }
                 }
