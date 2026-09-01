@@ -183,7 +183,8 @@ ApplicationWindow {
                             anchors.fill: parent
                             theme: appTheme
                             toolsModel: root.studioTools
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 0
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 0 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 0 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
@@ -197,7 +198,8 @@ ApplicationWindow {
                             theme: appTheme
                             engine: typeof photoEngine !== "undefined" ? photoEngine : null
                             dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 1
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 1 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 1 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
@@ -210,7 +212,8 @@ ApplicationWindow {
                             theme: appTheme
                             engine: typeof videoEngine !== "undefined" ? videoEngine : null
                             dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 2
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 2 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 2 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
@@ -223,7 +226,8 @@ ApplicationWindow {
                             theme: appTheme
                             engine: typeof pvSeparatorEngine !== "undefined" ? pvSeparatorEngine : null
                             dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 3
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 3 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 3 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
@@ -236,7 +240,8 @@ ApplicationWindow {
                             theme: appTheme
                             engine: typeof thumbSeparatorEngine !== "undefined" ? thumbSeparatorEngine : null
                             dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 8
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 8 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 8 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
@@ -249,31 +254,37 @@ ApplicationWindow {
                             theme: appTheme
                             engine: typeof remainingEngine !== "undefined" ? remainingEngine : null
                             dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 4
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 4 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 4 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                             Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
                         }
 
-                        GoogleDrivePage {
-                            id: pageDrive
+                        Loader {
+                            id: pageDriveLoader
                             anchors.fill: parent
-                            theme: appTheme
-                            engine: typeof driveEngine !== "undefined" ? driveEngine : null
-                            activeDriveTab: root.activePage === "googleDriveThumbs" ? "thumbnails" : "main"
-                            visible: opacity > 0
-                            opacity: pageContainer.targetIndex === 5 ? 1.0 : 0.0
-                            y: pageContainer.targetIndex === 5 ? 0 : 8
-                            Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
-                            Behavior on y { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
+                            enabled: pageContainer.targetIndex === 5
+                            visible: pageContainer.targetIndex === 5
+                            active: pageContainer.targetIndex === 5
+                            sourceComponent: Component {
+                                GoogleDrivePage {
+                                    anchors.fill: parent
+                                    theme: appTheme
+                                    engine: typeof driveEngine !== "undefined" ? driveEngine : null
+                                    dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
+                                    activeDriveTab: root.activePage === "googleDriveThumbs" ? "thumbnails" : "main"
+                                }
+                            }
                         }
 
                         ActivityPage {
                             id: pageActivity
                             anchors.fill: parent
                             theme: appTheme
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 6
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 6 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 6 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }
@@ -286,7 +297,8 @@ ApplicationWindow {
                             theme: appTheme
                             engine: typeof excelMergerEngine !== "undefined" ? excelMergerEngine : null
                             dialogs: typeof nativeDialogs !== "undefined" ? nativeDialogs : null
-                            visible: opacity > 0
+                            enabled: pageContainer.targetIndex === 7
+                            visible: opacity > 0.02
                             opacity: pageContainer.targetIndex === 7 ? 1.0 : 0.0
                             y: pageContainer.targetIndex === 7 ? 0 : 8
                             Behavior on opacity { NumberAnimation { duration: 240; easing.type: Easing.OutCubic } }

@@ -275,9 +275,9 @@ Dialog {
                                     anchors.centerIn: parent
                                     visible: !root.activePair || !root.activePair.videoThumbnailPath
                                     spacing: 4
-                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "🎬"; font.pixelSize: 28; opacity: 0.5 }
+                                    Text { Layout.alignment: Qt.AlignHCenter; text: "🎬"; font.pixelSize: 28; opacity: 0.5 }
                                     Text {
-                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        Layout.alignment: Qt.AlignHCenter
                                         text: "No _V Thumbnail Found"
                                         font.pixelSize: 11
                                         font.weight: Font.DemiBold
@@ -395,9 +395,9 @@ Dialog {
                                     anchors.centerIn: parent
                                     visible: !root.activePair || !root.activePair.photoThumbnailPath
                                     spacing: 4
-                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: "📸"; font.pixelSize: 28; opacity: 0.5 }
+                                    Text { Layout.alignment: Qt.AlignHCenter; text: "📸"; font.pixelSize: 28; opacity: 0.5 }
                                     Text {
-                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        Layout.alignment: Qt.AlignHCenter
                                         text: root.activePair && root.activePair.photoFolderName ? "No _P Thumbnail Found in Subfolder" : "Unpaired Video Clip"
                                         font.pixelSize: 11
                                         font.weight: Font.DemiBold

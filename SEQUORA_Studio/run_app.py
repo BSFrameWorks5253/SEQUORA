@@ -38,16 +38,36 @@ if str(PROJECT_ROOT) not in sys.path:
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
+# Set Windows taskbar App ID globally before creating any UI or COM components
+APP_USER_MODEL_ID = "BSFrameWorks.SEQUORA.Studio.v3"
+if sys.platform == "win32":
+    try:
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
+    except Exception:
+        pass
+
 from PySide6.QtCore import QObject, Signal, Slot, Property, QUrl, Qt
 from PySide6.QtWidgets import QApplication, QFileDialog
 from PySide6.QtGui import QIcon, QFont
 from PySide6.QtQml import QQmlApplicationEngine
+from PySide6.QtNetwork import QLocalServer, QLocalSocket
+
+
+# Suppress Windows WebAuthentication/Passkey credential popups & optimize QtWebEngine
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+    "--disable-features=WebAuthentication,WebAuthenticationConditionalUI,"
+    "WebAuthenticationPermitSameOriginWithAncestors,WebAuthFlowGoogle "
+    "--disable-webauthn --disable-blink-features=WebAuthentication "
+    "--enable-gpu-rasterization --no-default-browser-check"
+)
 
 try:
     from PySide6.QtWebEngineQuick import QtWebEngineQuick
     QtWebEngineQuick.initialize()
 except Exception as e:
     print(f"Notice: QtWebEngineQuick initialization: {e}")
+
 
 # Import core business logic from app services if available, else local fallback
 try:
@@ -2766,6 +2786,38 @@ class NativeDialogsWrapper(QObject):
     def openFolder(self, target_path):
         self.openPath(target_path)
 
+    @Slot(str)
+    def showInFolder(self, target_path):
+        """Highlights the downloaded file or selected directory in Windows File Explorer."""
+        if not target_path:
+            return
+        clean = os.path.abspath(os.path.normpath(target_path.replace("file:///", "").strip()))
+        if os.path.exists(clean):
+            try:
+                if sys.platform == "win32":
+                    import subprocess
+                    subprocess.Popen(f'explorer /select,"{clean}"')
+                elif sys.platform == "darwin":
+                    import subprocess
+                    subprocess.run(["open", "-R", clean])
+                else:
+                    self.openFolder(os.path.dirname(clean))
+            except Exception as e:
+                print(f"Error revealing path {clean}: {e}")
+        else:
+            # If specific file is missing, open parent folder
+            parent_dir = os.path.dirname(clean)
+            if os.path.exists(parent_dir):
+                self.openFolder(parent_dir)
+
+    @Slot(result=str)
+    def getDefaultDownloadPath(self):
+        """Returns standard system Downloads folder."""
+        downloads_dir = str(Path.home() / "Downloads")
+        os.makedirs(downloads_dir, exist_ok=True)
+        return downloads_dir.replace("\\", "/")
+
+
 
 def copy_cell_style(src_cell, dst_cell):
     """Deep-copies all visual styling attributes from src_cell to dst_cell."""
@@ -3160,6 +3212,24 @@ class GoogleDriveManagerWrapper(QObject):
         os.makedirs(storage_dir, exist_ok=True)
         return storage_dir
 
+    @Property(str, constant=True)
+    def mainSessionStoragePath(self):
+        storage_dir = os.path.abspath(str(SCRIPT_DIR / "drive_session_data" / "main_drive")).replace("\\", "/")
+        os.makedirs(storage_dir, exist_ok=True)
+        return storage_dir
+
+    @Property(str, constant=True)
+    def refSessionStoragePath(self):
+        storage_dir = os.path.abspath(str(SCRIPT_DIR / "drive_session_data" / "ref_drive")).replace("\\", "/")
+        os.makedirs(storage_dir, exist_ok=True)
+        return storage_dir
+
+    @Property(str, constant=True)
+    def defaultDownloadPath(self):
+        downloads_dir = str(Path.home() / "Downloads").replace("\\", "/")
+        os.makedirs(downloads_dir, exist_ok=True)
+        return downloads_dir
+
     @Property(str, notify=configChanged)
     def mainDataUrl(self):
         return self._config.get("mainDataUrl", "https://drive.google.com/drive/my-drive")
@@ -3175,7 +3245,7 @@ class GoogleDriveManagerWrapper(QObject):
             clean_url = "https://" + clean_url
         if drive_type == "main":
             self._config["mainDataUrl"] = clean_url
-        elif drive_type in ("thumbnails", "thumbs"):
+        elif drive_type in ("thumbnails", "thumbs", "ref"):
             self._config["thumbnailsUrl"] = clean_url
         self.save_config_file()
         self.configChanged.emit()
@@ -3187,6 +3257,18 @@ class GoogleDriveManagerWrapper(QObject):
         if not target.startswith("http"):
             target = "https://" + target
         webbrowser.open(target)
+
+    @Slot(str)
+    def clearSession(self, drive_type):
+        """Clears local storage / session data for account re-authentication."""
+        target_dir = self.mainSessionStoragePath if drive_type == "main" else self.refSessionStoragePath
+        try:
+            if os.path.exists(target_dir):
+                shutil.rmtree(target_dir, ignore_errors=True)
+                os.makedirs(target_dir, exist_ok=True)
+        except Exception as e:
+            print(f"Error clearing drive session ({drive_type}): {e}")
+
 
 
 class ActivityAndReportsManagerWrapper(QObject):
@@ -3263,17 +3345,26 @@ class ActivityAndReportsManagerWrapper(QObject):
 
 
 def main():
-    # Set Windows taskbar App ID so custom icon displays cleanly
-    if sys.platform == "win32":
+    SINGLE_INSTANCE_SOCKET = "SEQUORA_STUDIO_SINGLE_INSTANCE_V3"
+
+    # 1. Single-Instance Check: If already running, activate existing window and exit
+    client_socket = QLocalSocket()
+    client_socket.connectToServer(SINGLE_INSTANCE_SOCKET)
+    if client_socket.waitForConnected(300):
         try:
-            import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("sequora.studio.suite.v3")
+            client_socket.write(b"ACTIVATE\n")
+            client_socket.waitForBytesWritten(300)
+            client_socket.disconnectFromServer()
         except Exception:
             pass
+        print("[NOTICE] SEQUORA Studio is already running. Switched focus to existing window.")
+        sys.exit(0)
 
-    app = QApplication(sys.argv)
+    # 2. Primary Instance Setup
+    app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("SEQUORA Studio")
-    app.setOrganizationName("SEQUORA")
+    app.setOrganizationName("BSFrameWorks")
+    app.setOrganizationDomain("bsframeworks.com")
 
     # Set Application Icon
     icon_paths = [
@@ -3286,6 +3377,7 @@ def main():
         if ip.exists():
             app.setWindowIcon(QIcon(str(ip)))
             break
+
 
     engine = QQmlApplicationEngine()
 
@@ -3397,8 +3489,37 @@ def main():
         print("[ERROR] Failed to load QML root object.")
         sys.exit(-1)
 
+    # 3. Single-Instance Server: Listen for duplicate launch attempts and bring window to front
+    local_server = QLocalServer()
+    # Remove stale socket if needed
+    QLocalServer.removeServer(SINGLE_INSTANCE_SOCKET)
+    if local_server.listen(SINGLE_INSTANCE_SOCKET):
+        def on_new_connection():
+            sock = local_server.nextPendingConnection()
+            if sock:
+                sock.readyRead.connect(lambda: sock.readAll())
+                # Restore and focus existing window
+                for obj in engine.rootObjects():
+                    if hasattr(obj, "showNormal"):
+                        obj.showNormal()
+                    if hasattr(obj, "raise_"):
+                        obj.raise_()
+                    if hasattr(obj, "requestActivate"):
+                        obj.requestActivate()
+                if sys.platform == "win32":
+                    try:
+                        import ctypes
+                        hwnd = ctypes.windll.user32.FindWindowW(None, "SEQUORA Studio — Creative Production Suite")
+                        if hwnd:
+                            ctypes.windll.user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                            ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    except Exception:
+                        pass
+        local_server.newConnection.connect(on_new_connection)
+
     print("[SUCCESS] SEQUORA Qt6/QML Native GUI launched.")
     sys.exit(app.exec())
+
 
 
 if __name__ == "__main__":

@@ -204,7 +204,7 @@ ScrollView {
                         text: "Click any stage to execute tool"
                         font.pixelSize: 11
                         color: root.theme.accent
-                        font.weight: Font.SemiBold
+                        font.weight: Font.DemiBold
                     }
                 }
 

@@ -91,12 +91,16 @@ start "" "{pythonw_exe}" main.py
     return vbs_path
 
 def create_windows_shortcuts(vbs_launcher_path):
-    """Creates Desktop and Start Menu shortcuts using PowerShell WScript.Shell."""
-    print("[*] Creating Windows Shortcuts...")
+    """Creates Desktop and Start Menu shortcuts targeting pythonw.exe with AppUserModelID for unified taskbar stacking."""
+    print("[*] Creating unified Windows Shortcuts...")
     
     uninstall_bat = PROJECT_ROOT / "UNINSTALL_SEQUORA.bat"
+    python_dir = Path(sys.executable).parent
+    pythonw_exe = python_dir / "pythonw.exe"
+    if not pythonw_exe.exists():
+        pythonw_exe = Path(sys.executable)
+    py_script = STUDIO_DIR / "main.py"
 
-    # PowerShell script to create robust Windows shortcuts with icons using native SpecialFolder resolution
     ps_commands = f'''
 $WshShell = New-Object -ComObject WScript.Shell
 $DesktopPath = [Environment]::GetFolderPath([Environment+SpecialFolder]::Desktop)
@@ -107,11 +111,11 @@ if (-not (Test-Path $StartMenuDir)) {{
     New-Item -ItemType Directory -Path $StartMenuDir -Force | Out-Null
 }}
 
-# 1. Desktop Shortcut
+# 1. Desktop Shortcut (Direct pythonw target for perfect taskbar icon grouping)
 $DesktopShortcutPath = Join-Path $DesktopPath "{APP_NAME}.lnk"
 $Shortcut = $WshShell.CreateShortcut($DesktopShortcutPath)
-$Shortcut.TargetPath = "wscript.exe"
-$Shortcut.Arguments = """{str(vbs_launcher_path)}"""
+$Shortcut.TargetPath = "{str(pythonw_exe)}"
+$Shortcut.Arguments = """{str(py_script)}"""
 $Shortcut.WorkingDirectory = "{str(STUDIO_DIR)}"
 $Shortcut.Description = "{APP_DESCRIPTION}"
 $Shortcut.IconLocation = "{str(ICON_ICO)}, 0"
@@ -121,8 +125,8 @@ Write-Host "    [OK] Desktop Shortcut: $DesktopShortcutPath"
 # 2. Start Menu Shortcut
 $StartMenuShortcutPath = Join-Path $StartMenuDir "{APP_NAME}.lnk"
 $Shortcut2 = $WshShell.CreateShortcut($StartMenuShortcutPath)
-$Shortcut2.TargetPath = "wscript.exe"
-$Shortcut2.Arguments = """{str(vbs_launcher_path)}"""
+$Shortcut2.TargetPath = "{str(pythonw_exe)}"
+$Shortcut2.Arguments = """{str(py_script)}"""
 $Shortcut2.WorkingDirectory = "{str(STUDIO_DIR)}"
 $Shortcut2.Description = "{APP_DESCRIPTION}"
 $Shortcut2.IconLocation = "{str(ICON_ICO)}, 0"
@@ -144,6 +148,7 @@ $Shortcut3.Save()
         f.write(ps_commands)
 
     subprocess.run(["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps_file)], check=True)
+
     
     if ps_file.exists():
         try:
