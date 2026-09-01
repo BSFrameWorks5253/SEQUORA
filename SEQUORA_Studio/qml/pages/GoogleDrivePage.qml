@@ -88,7 +88,7 @@ Item {
         persistentStoragePath: (root.engine && root.engine.mainSessionStoragePath) ? root.engine.mainSessionStoragePath : ""
         cachePath: (root.engine && root.engine.mainSessionStoragePath) ? (root.engine.mainSessionStoragePath + "/cache") : ""
         offTheRecord: false
-        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         onDownloadRequested: function(download) {
             root.handleDownload(download)
         }
@@ -102,7 +102,7 @@ Item {
         persistentStoragePath: (root.engine && root.engine.refSessionStoragePath) ? root.engine.refSessionStoragePath : ""
         cachePath: (root.engine && root.engine.refSessionStoragePath) ? (root.engine.refSessionStoragePath + "/cache") : ""
         offTheRecord: false
-        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
         onDownloadRequested: function(download) {
             root.handleDownload(download)
         }
@@ -483,8 +483,13 @@ Item {
                 settings.pluginsEnabled: true
                 settings.fullScreenSupportEnabled: true
                 settings.autoLoadImages: true
-                settings.localContentCanAccessRemoteUrls: true
+                settings.localStorageEnabled: true
+                settings.javascriptCanAccessClipboard: true
                 settings.allowRunningInsecureContent: false
+                settings.localContentCanAccessRemoteUrls: false
+                settings.webGLEnabled: true
+                settings.accelerated2dCanvasEnabled: true
+                settings.dnsPrefetchEnabled: true
             }
 
             WebEngineView {
@@ -497,8 +502,13 @@ Item {
                 settings.pluginsEnabled: true
                 settings.fullScreenSupportEnabled: true
                 settings.autoLoadImages: true
-                settings.localContentCanAccessRemoteUrls: true
+                settings.localStorageEnabled: true
+                settings.javascriptCanAccessClipboard: true
                 settings.allowRunningInsecureContent: false
+                settings.localContentCanAccessRemoteUrls: false
+                settings.webGLEnabled: true
+                settings.accelerated2dCanvasEnabled: true
+                settings.dnsPrefetchEnabled: true
             }
 
             // ── Floating Native Download Manager HUD (Apple Pro / Linear standard)

@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SEQUORA Studio — Turbo Reference & Remaining Photos Uploader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #080A0E;
+      --surface: #10141C;
+      --surface-elevated: #161D28;
+      --border: #202938;
+      --accent: #06B6D4;
+      --accent-hover: #22D3EE;
+      --accent-soft: rgba(6, 182, 212, 0.14);
+      --success: #10B981;
+      --text: #F8FAFC;
+      --text-muted: #8291A5;
+      --font-main: 'Plus Jakarta Sans', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Category Switcher (Reference Photos vs Remaining Photos) */
+    .mode-switcher {
+      display: flex;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 4px;
+      border-radius: 12px;
+      gap: 6px;
+    }
+
+    .mode-tab {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: var(--font-main);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .mode-tab.active {
+      background: var(--surface-elevated);
+      color: var(--accent-hover);
+      border: 1px solid var(--accent);
+      box-shadow: 0 2px 8px rgba(6, 182, 212, 0.15);
+    }
+
+    /* Top Destination & Account Info Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 18px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      font-size: 12px;
+    }
+
+    .destination-tag {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+    }
+
+    .destination-tag strong {
+      color: var(--accent-hover);
+      font-family: var(--font-mono);
+      font-weight: 700;
+    }
+
+    .btn-edit-path {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      transition: all 0.15s;
+    }
+    .btn-edit-path:hover { color: var(--text); background: var(--surface-elevated); }
+
+    .badge-turbo {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(6, 182, 212, 0.2);
+      color: var(--accent-hover);
+      border: 1px solid var(--accent);
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+
+    /* Minimalist Upload Drop Zone */
+    .upload-zone {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: 20px;
+      padding: 56px 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      transform: translateY(-2px);
+    }
+
+    .zone-icon {
+      font-size: 50px;
+      margin-bottom: 12px;
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+    .upload-zone:hover .zone-icon { transform: scale(1.08); }
+
+    .zone-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.4px;
+      margin-bottom: 6px;
+    }
+
+    .zone-subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+
+    .zone-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-browse {
+      background: var(--accent);
+      color: #03131D;
+      font-family: var(--font-main);
+      font-size: 14px;
+      font-weight: 800;
+      border: none;
+      padding: 12px 26px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 14px rgba(6, 182, 212, 0.35);
+      transition: all 0.15s ease;
+    }
+    .btn-browse:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .speed-config {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface-elevated);
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .speed-config select {
+      background: transparent;
+      border: none;
+      color: var(--accent-hover);
+      font-weight: 700;
+      font-family: var(--font-mono);
+      outline: none;
+      cursor: pointer;
+    }
+
+    .hidden-input { display: none; }
+
+    /* Turbo Live Progress Card */
+    .progress-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .progress-header-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .progress-title {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .progress-pct {
+      font-size: 16px;
+      font-weight: 800;
+      font-family: var(--font-mono);
+      color: var(--accent-hover);
+    }
+
+    .progress-track {
+      background: var(--surface-elevated);
+      height: 10px;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      background: linear-gradient(90deg, var(--accent) 0%, #38BDF8 100%);
+      height: 100%;
+      width: 0%;
+      transition: width 0.15s ease;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      background: var(--surface-elevated);
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    .stat-box {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+
+    .stat-value {
+      font-size: 12px;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* Worker Activity Stream */
+    .workers-box {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 110px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .worker-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      background: rgba(255,255,255,0.02);
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .worker-name {
+      color: var(--accent-hover);
+      font-weight: 700;
+    }
+
+    .worker-file {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 420px;
+      text-align: right;
+    }
+
+    .btn-open-drive {
+      background: var(--success);
+      color: #FFFFFF;
+      font-family: var(--font-main);
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 10px;
+      text-decoration: none;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 4px;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+      transition: opacity 0.15s;
+    }
+    .btn-open-drive:hover { opacity: 0.92; }
+
+    /* Modal for one-time path change */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    .modal-box {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      width: 90%;
+      max-width: 460px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .modal-box h3 { font-size: 16px; font-weight: 700; }
+    .modal-box p { font-size: 12px; color: var(--text-muted); }
+    .modal-box input {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    .modal-box input:focus { border-color: var(--accent); outline: none; }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- 2-Option Category Switcher (Same Drive, Different Destinations) -->
+    <div class="mode-switcher">
+      <button class="mode-tab active" id="tabRef" onclick="setMode('ref')">
+        📸 Reference Photos & Thumbnails
+      </button>
+      <button class="mode-tab" id="tabRem" onclick="setMode('remaining')">
+        📦 Remaining Photos Folders
+      </button>
+    </div>
+
+    <!-- Top Destination Bar (One-time saved location) -->
+    <div class="top-bar">
+      <div class="destination-tag">
+        <span>📂 Destination:</span>
+        <strong id="displayPath">SEQUORA_Reference_Archives/Reference_Photos</strong>
+        <button class="btn-edit-path" onclick="openPathModal()" title="Change folder destination">✏️</button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span class="badge-turbo">⚡ TURBO 4X</span>
+        <div style="color: var(--text-muted); font-size: 11px;" id="userEmail">Reference Account</div>
+      </div>
+    </div>
+
+    <!-- Drop Zone -->
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('folderInput').click();">
+      <span class="zone-icon" id="zoneIcon">📸</span>
+      <div class="zone-title" id="zoneTitle">Drop Reference Folder Here</div>
+      <div class="zone-subtitle" id="zoneSub">Parallel multi-stream engine uploads files simultaneously</div>
+      
+      <div class="zone-actions">
+        <button class="btn-browse" onclick="event.stopPropagation(); document.getElementById('folderInput').click();">
+          📁 Browse Folder
+        </button>
+
+        <div class="speed-config" onclick="event.stopPropagation();">
+          <span>⚡ Parallel Streams:</span>
+          <select id="concurrencySelect" onchange="concurrencyLimit = parseInt(this.value);">
+            <option value="3">3 Streams</option>
+            <option value="4" selected>4 Streams (Recommended)</option>
+            <option value="6">6 Streams (Ultra Fast)</option>
+          </select>
+        </div>
+      </div>
+
+      <input type="file" id="folderInput" class="hidden-input" webkitdirectory directory multiple>
+    </div>
+
+    <!-- Turbo Live Progress Card -->
+    <div class="progress-card" id="progressCard">
+      <div class="progress-header">
+        <div class="progress-header-left">
+          <span class="badge-turbo" id="liveStreamBadge">⚡ 4 Streams</span>
+          <span class="progress-title" id="progressTitle">Uploading Files...</span>
+        </div>
+        <span class="progress-pct" id="progressPct">0%</span>
+      </div>
+
+      <div class="progress-track">
+        <div class="progress-fill" id="progressBar"></div>
+      </div>
+
+      <!-- Live Performance Speedometer & ETA -->
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">Files Done</span>
+          <span class="stat-value" id="statFiles">0 / 0</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Upload Speed</span>
+          <span class="stat-value" id="statSpeed" style="color: #22D3EE;">0.0 MB/s</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Time Elapsed</span>
+          <span class="stat-value" id="statTime">00:00</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Estimated Left</span>
+          <span class="stat-value" id="statEta" style="color: #FCD34D;">Calculating...</span>
+        </div>
+      </div>
+
+      <!-- Parallel Worker Activity Stream -->
+      <div class="workers-box" id="workersContainer"></div>
+
+      <a id="btnDriveLink" href="#" target="_blank" class="btn-open-drive">
+        ✅ Open Uploaded Folder in Google Drive ↗
+      </a>
+    </div>
+  </div>
+
+  <!-- Path Change Modal -->
+  <div class="modal-overlay" id="pathModal">
+    <div class="modal-box">
+      <h3>Change Drive Destination Folder</h3>
+      <p id="modalDesc">Specify the folder path in your Google Drive. Saved permanently.</p>
+      <input type="text" id="inputCustomPath" value="">
+      <div class="modal-actions">
+        <button class="btn-edit-path" onclick="closePathModal()" style="padding: 8px 14px;">Cancel</button>
+        <button class="btn-browse" onclick="saveNewPath()" style="padding: 8px 18px; font-size: 12px;">Save Preference</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let concurrencyLimit = 4;
+    let currentMode = "ref"; // "ref" | "remaining"
+    let savedSettings = { refFolder: "", remainingFolder: "" };
+    let queue = [];
+    let uploadedCount = 0;
+    let totalCount = 0;
+    let totalBytes = 0;
+    let uploadedBytes = 0;
+    let driveFolderUrl = "";
+    let activeWorkers = 0;
+    let folderIdCache = {}; // relativePath -> Google Drive folderId cache
+    let startTime = null;
+    let timerInterval = null;
+
+    // Load saved persistent settings
+    window.addEventListener('DOMContentLoaded', () => {
+      google.script.run
+        .withSuccessHandler(settings => {
+          if (settings) {
+            savedSettings = settings;
+            if (settings.userEmail) document.getElementById('userEmail').textContent = settings.userEmail;
+            setMode(settings.lastMode || "ref", false);
+          }
+        })
+        .getReferenceSettings();
+    });
+
+    function setMode(mode, savePref = true) {
+      currentMode = mode;
+      folderIdCache = {}; // Reset folder cache per mode
+      const tabRef = document.getElementById('tabRef');
+      const tabRem = document.getElementById('tabRem');
+      const zoneIcon = document.getElementById('zoneIcon');
+      const zoneTitle = document.getElementById('zoneTitle');
+      const displayPath = document.getElementById('displayPath');
+
+      if (mode === 'remaining') {
+        tabRef.classList.remove('active');
+        tabRem.classList.add('active');
+        zoneIcon.textContent = '📦';
+        zoneTitle.textContent = 'Drop Remaining Photos Folder Here';
+        displayPath.textContent = savedSettings.remainingFolder || "SEQUORA_Reference_Archives/Remaining_Photos";
+        if (savedSettings.remainingFolderId) folderIdCache[""] = savedSettings.remainingFolderId;
+        if (savedSettings.remainingFolderUrl) driveFolderUrl = savedSettings.remainingFolderUrl;
+      } else {
+        tabRem.classList.remove('active');
+        tabRef.classList.add('active');
+        zoneIcon.textContent = '📸';
+        zoneTitle.textContent = 'Drop Reference Folder Here';
+        displayPath.textContent = savedSettings.refFolder || "SEQUORA_Reference_Archives/Reference_Photos";
+        if (savedSettings.refFolderId) folderIdCache[""] = savedSettings.refFolderId;
+        if (savedSettings.refFolderUrl) driveFolderUrl = savedSettings.refFolderUrl;
+      }
+
+      if (savePref) {
+        google.script.run.saveActiveMode(mode);
+      }
+    }
+
+    const dropZone = document.getElementById('dropZone');
+    const folderInput = document.getElementById('folderInput');
+
+    folderInput.addEventListener('change', (e) => startUpload(e.target.files));
+
+    // Drag & drop handlers
+    ['dragenter', 'dragover'].forEach(n => dropZone.addEventListener(n, (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); }));
+    ['dragleave', 'drop'].forEach(n => dropZone.addEventListener(n, (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); }));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        startUpload(e.dataTransfer.files);
+      }
+    });
+
+    function startUpload(files) {
+      if (!files || files.length === 0) return;
+
+      queue = [];
+      uploadedCount = 0;
+      totalCount = files.length;
+      totalBytes = 0;
+      uploadedBytes = 0;
+      activeWorkers = 0;
+      startTime = Date.now();
+
+      document.getElementById('progressCard').style.display = 'flex';
+      document.getElementById('btnDriveLink').style.display = 'none';
+      document.getElementById('liveStreamBadge').textContent = `⚡ ${concurrencyLimit} Streams`;
+
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        const relPath = f.webkitRelativePath ? f.webkitRelativePath.substring(0, f.webkitRelativePath.lastIndexOf('/')) : '';
+        queue.push({
+          file: f,
+          relativePath: relPath,
+          size: f.size || 0,
+          retries: 0
+        });
+        totalBytes += (f.size || 0);
+      }
+
+      initWorkersUI();
+      startTimer();
+      updateUI();
+
+      // Launch parallel worker streams
+      for (let w = 0; w < concurrencyLimit; w++) {
+        runWorker(w + 1);
+      }
+    }
+
+    function initWorkersUI() {
+      const container = document.getElementById('workersContainer');
+      container.innerHTML = '';
+      for (let i = 1; i <= concurrencyLimit; i++) {
+        const row = document.createElement('div');
+        row.className = 'worker-row';
+        row.id = `worker-row-${i}`;
+        row.innerHTML = `
+          <span class="worker-name">Stream #${i}:</span>
+          <span class="worker-file" id="worker-text-${i}">Idle</span>
+        `;
+        container.appendChild(row);
+      }
+    }
+
+    function updateWorkerText(workerId, text) {
+      const el = document.getElementById(`worker-text-${workerId}`);
+      if (el) el.textContent = text;
+    }
+
+    function runWorker(workerId) {
+      if (queue.length === 0) {
+        updateWorkerText(workerId, "Finished ✓");
+        checkAllCompleted();
+        return;
+      }
+
+      const item = queue.shift();
+      activeWorkers++;
+      updateWorkerText(workerId, "Reading " + item.file.name);
+
+      const cachedFolderId = folderIdCache[item.relativePath] || null;
+
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const base64 = e.target.result.split(',')[1];
+        const payload = {
+          mode: currentMode,
+          name: item.file.name,
+          type: item.file.type || 'application/octet-stream',
+          base64: base64,
+          relativePath: item.relativePath,
+          folderId: cachedFolderId
+        };
+
+        updateWorkerText(workerId, "⚡ Uploading " + item.file.name);
+
+        google.script.run
+          .withSuccessHandler(res => {
+            activeWorkers--;
+            if (res && res.success) {
+              uploadedCount++;
+              uploadedBytes += item.size;
+              if (res.folderUrl) driveFolderUrl = res.folderUrl;
+              if (res.folderId && item.relativePath) {
+                folderIdCache[item.relativePath] = res.folderId;
+              }
+              updateWorkerText(workerId, "✓ " + item.file.name);
+            } else {
+              handleWorkerFailure(item, workerId);
+            }
+            updateUI();
+            runWorker(workerId);
+          })
+          .withFailureHandler(err => {
+            activeWorkers--;
+            handleWorkerFailure(item, workerId);
+            updateUI();
+            runWorker(workerId);
+          })
+          .uploadFileToReferenceDrive(payload);
+      };
+
+      reader.onerror = function() {
+        activeWorkers--;
+        handleWorkerFailure(item, workerId);
+        updateUI();
+        runWorker(workerId);
+      };
+
+      reader.readAsDataURL(item.file);
+    }
+
+    function handleWorkerFailure(item, workerId) {
+      if (item.retries < 2) {
+        item.retries++;
+        queue.unshift(item);
+        updateWorkerText(workerId, "⚠️ Retrying " + item.file.name);
+      } else {
+        uploadedCount++;
+        uploadedBytes += item.size;
+        updateWorkerText(workerId, "❌ Failed: " + item.file.name);
+      }
+    }
+
+    function checkAllCompleted() {
+      if (queue.length === 0 && activeWorkers === 0) {
+        stopTimer();
+        document.getElementById('progressTitle').textContent = `Upload Completed! (${uploadedCount} files)`;
+        document.getElementById('progressPct').textContent = "100%";
+        document.getElementById('progressBar').style.width = "100%";
+        document.getElementById('statEta').textContent = "Done ⚡";
+        document.getElementById('statEta').style.color = "#10B981";
+
+        if (driveFolderUrl) {
+          const btn = document.getElementById('btnDriveLink');
+          btn.href = driveFolderUrl;
+          btn.style.display = 'inline-flex';
+        }
+      }
+    }
+
+    function updateUI() {
+      const pct = totalCount > 0 ? Math.min(100, Math.round((uploadedCount / totalCount) * 100)) : 0;
+      document.getElementById('progressBar').style.width = pct + '%';
+      document.getElementById('progressPct').textContent = pct + '%';
+      document.getElementById('statFiles').textContent = `${uploadedCount} / ${totalCount}`;
+
+      if (queue.length > 0) {
+        document.getElementById('progressTitle').textContent = `Uploading: ${uploadedCount} / ${totalCount} files`;
+      }
+    }
+
+    function startTimer() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        if (!startTime) return;
+        const elapsedSec = Math.max(1, Math.floor((Date.now() - startTime) / 1000));
+        
+        const mins = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+        const secs = String(elapsedSec % 60).padStart(2, '0');
+        document.getElementById('statTime').textContent = `${mins}:${secs}`;
+
+        const speedMBps = (uploadedBytes / (1024 * 1024)) / elapsedSec;
+        if (speedMBps >= 1) {
+          document.getElementById('statSpeed').textContent = speedMBps.toFixed(1) + ' MB/s';
+        } else {
+          const speedKBps = (uploadedBytes / 1024) / elapsedSec;
+          document.getElementById('statSpeed').textContent = Math.round(speedKBps) + ' KB/s';
+        }
+
+        const remainingBytes = Math.max(0, totalBytes - uploadedBytes);
+        if (speedMBps > 0.05 && remainingBytes > 0) {
+          const remainingSec = Math.ceil((remainingBytes / (1024 * 1024)) / speedMBps);
+          const rMins = String(Math.floor(remainingSec / 60)).padStart(2, '0');
+          const rSecs = String(remainingSec % 60).padStart(2, '0');
+          document.getElementById('statEta').textContent = `${rMins}:${rSecs}`;
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+
+    function openPathModal() {
+      const input = document.getElementById('inputCustomPath');
+      input.value = currentMode === 'remaining' ? (savedSettings.remainingFolder || "SEQUORA_Reference_Archives/Remaining_Photos") : (savedSettings.refFolder || "SEQUORA_Reference_Archives/Reference_Photos");
+      document.getElementById('pathModal').style.display = 'flex';
+    }
+    function closePathModal() { document.getElementById('pathModal').style.display = 'none'; }
+    function saveNewPath() {
+      const val = document.getElementById('inputCustomPath').value.trim();
+      google.script.run
+        .withSuccessHandler(res => {
+          savedSettings = res;
+          document.getElementById('displayPath').textContent = currentMode === 'remaining' ? res.remainingFolder : res.refFolder;
+          folderIdCache = {}; // Reset cache
+          if (currentMode === 'remaining' && res.remainingFolderId) folderIdCache[""] = res.remainingFolderId;
+          if (currentMode === 'ref' && res.refFolderId) folderIdCache[""] = res.refFolderId;
+          closePathModal();
+        })
+        .saveReferencePath(currentMode, val);
+    }
+  </script>
+</body>
+</html>

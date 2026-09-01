@@ -54,11 +54,8 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 
 
-# Suppress Windows WebAuthentication/Passkey credential popups & optimize QtWebEngine
+# Configure QtWebEngine Chromium Flags
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-    "--disable-features=WebAuthentication,WebAuthenticationConditionalUI,"
-    "WebAuthenticationPermitSameOriginWithAncestors,WebAuthFlowGoogle "
-    "--disable-webauthn --disable-blink-features=WebAuthentication "
     "--enable-gpu-rasterization --no-default-browser-check"
 )
 
@@ -3489,7 +3486,42 @@ def main():
         print("[ERROR] Failed to load QML root object.")
         sys.exit(-1)
 
-    # 3. Single-Instance Server: Listen for duplicate launch attempts and bring window to front
+    # 3. Apply Crisp Native Windows Taskbar Icon via Win32 API
+    def apply_native_taskbar_icon():
+        ico_path = (SCRIPT_DIR / "assets" / "icon.ico").resolve()
+        if not ico_path.exists():
+            ico_path = (PROJECT_ROOT / "assets" / "icon.ico").resolve()
+        if not ico_path.exists():
+            return
+
+        q_icon = QIcon(str(ico_path))
+        for win in engine.rootObjects():
+            if hasattr(win, "setIcon"):
+                win.setIcon(q_icon)
+            if sys.platform == "win32" and hasattr(win, "winId"):
+                try:
+                    import ctypes
+                    WM_SETICON = 0x0080
+                    ICON_SMALL = 0
+                    ICON_BIG = 1
+                    IMAGE_ICON = 1
+                    LR_LOADFROMFILE = 0x00000010
+                    LR_DEFAULTSIZE = 0x00000040
+
+                    hicon_big = ctypes.windll.user32.LoadImageW(None, str(ico_path), IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE)
+                    hicon_small = ctypes.windll.user32.LoadImageW(None, str(ico_path), IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+                    hwnd = int(win.winId())
+                    if hwnd:
+                        if hicon_big:
+                            ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
+                        if hicon_small:
+                            ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+                except Exception as e:
+                    print("Taskbar icon attachment notice:", e)
+
+    apply_native_taskbar_icon()
+
+    # 4. Single-Instance Server: Listen for duplicate launch attempts and bring window to front
     local_server = QLocalServer()
     # Remove stale socket if needed
     QLocalServer.removeServer(SINGLE_INSTANCE_SOCKET)
