@@ -397,6 +397,71 @@ class PhotoMatcherEngineWrapper(QObject):
                         doc_dir = os.path.join(base_dir, "Document")
                         os.makedirs(doc_dir, exist_ok=True)
                         ts = time.strftime("%Y%m%d_%H%M%S")
+                        
+                        # 1. Export Excel (.xlsx)
+                        xlsx_p = os.path.join(doc_dir, f"Photo_Match_Report_{ts}.xlsx")
+                        try:
+                            import openpyxl
+                            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+                            wb = openpyxl.Workbook()
+                            ws = wb.active
+                            ws.title = "Photo Match Report"
+
+                            ws.merge_cells("A1:F1")
+                            ws["A1"] = "SEQUORA Studio — Photo Match Report"
+                            ws["A1"].font = Font(name="Segoe UI", size=14, bold=True, color="FFFFFF")
+                            ws["A1"].fill = PatternFill(start_color="4B2C82", end_color="4B2C82", fill_type="solid")
+                            ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+                            ws.row_dimensions[1].height = 28
+
+                            hdr_fill = PatternFill(start_color="7C5CBF", end_color="7C5CBF", fill_type="solid")
+                            hdr_font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+                            thin_side = Side(style="thin", color="D9D9D9")
+                            table_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+                            headers = ["SR NO", "DATE FOLDER", "ORIGINAL NAME", "NEW NAME", "STATUS", "FULL PATH"]
+                            ws.row_dimensions[3].height = 22
+                            for col_idx, hdr in enumerate(headers, 1):
+                                cell = ws.cell(row=3, column=col_idx, value=hdr)
+                                cell.font = hdr_font
+                                cell.fill = hdr_fill
+                                cell.alignment = Alignment(horizontal="center", vertical="center")
+                                cell.border = table_border
+
+                            zebra_fill = PatternFill(start_color="F7F5FC", end_color="F7F5FC", fill_type="solid")
+                            for row_idx, itm in enumerate(items, 4):
+                                is_even = (row_idx % 2 == 0)
+                                row_data = [
+                                    row_idx - 3,
+                                    itm.get("date_folder_name", ""),
+                                    itm.get("original_name", ""),
+                                    itm.get("proposed_new_filename", ""),
+                                    itm.get("status", ""),
+                                    itm.get("full_path", "")
+                                ]
+                                ws.row_dimensions[row_idx].height = 20
+                                for col_idx, val in enumerate(row_data, 1):
+                                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                                    cell.font = Font(name="Segoe UI", size=9, color="222222")
+                                    if is_even:
+                                        cell.fill = zebra_fill
+                                    cell.border = table_border
+                                    if col_idx in (1, 5):
+                                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                                    else:
+                                        cell.alignment = Alignment(horizontal="left", vertical="center")
+
+                            for col in ws.columns:
+                                col_letter = openpyxl.utils.get_column_letter(col[0].column)
+                                max_len = max(len(str(c.value or "")) for c in col if c.row > 1) if col else 12
+                                ws.column_dimensions[col_letter].width = max(12, min(max_len + 3, 60))
+
+                            wb.save(xlsx_p)
+                        except Exception as ex_wb:
+                            print(f"Photo report Excel export notice: {ex_wb}")
+
+                        # 2. Export CSV Fallback
                         csv_p = os.path.join(doc_dir, f"Photo_Match_Report_{ts}.csv")
                         with open(csv_p, "w", newline="", encoding="utf-8-sig") as f_csv:
                             writer = csv.writer(f_csv)
@@ -410,15 +475,18 @@ class PhotoMatcherEngineWrapper(QObject):
                                     itm.get("status", ""),
                                     itm.get("full_path", "")
                                 ])
-                        self.reportExported.emit("csv", csv_p)
+                        self.reportExported.emit("excel", xlsx_p if os.path.exists(xlsx_p) else csv_p)
                 except Exception as exp:
                     print(f"Photo report export notice: {exp}")
 
                 updated_report = dict(self._last_scan_result) if self._last_scan_result else {}
                 updated_report["all_items"] = items
                 updated_report["items"] = items
-                if 'csv_p' in locals():
+                if 'xlsx_p' in locals() and os.path.exists(xlsx_p):
+                    updated_report["autoExportedReportPath"] = xlsx_p
+                elif 'csv_p' in locals():
                     updated_report["autoExportedReportPath"] = csv_p
+                if 'doc_dir' in locals():
                     updated_report["documentFolderPath"] = doc_dir
                 self._last_scan_result = updated_report
 
@@ -544,40 +612,81 @@ class VideoTransferEngineWrapper(QObject):
     def parse_sequence_name(raw_name: str) -> dict:
         ext = os.path.splitext(raw_name)[1]
         name_without_ext = os.path.splitext(raw_name)[0].strip() if ext else raw_name.strip()
-        seq_match = re.match(r'^(\d+)\s*[-_]?\s*([A-Za-z]+.*)$', name_without_ext)
-        sequence = ""
-        name_part = name_without_ext
-        prefix = ""
+        
+        # 1. Strip trailing video/thumbnail suffixes (-its-v, _v, -v, _p, -p)
+        clean = re.sub(r'[-_](?:its|v|p)+(?:[-_]v|[-_]p)?$', '', name_without_ext, flags=re.I).strip()
+        # 2. Strip leading date format if present (e.g. 2026-09-01_ or 1448-03-12_)
+        clean = re.sub(r'^\d{4}[-_.]\d{2}[-_.]\d{2}[\s_-]*', '', clean).strip()
 
-        if seq_match:
-            sequence = seq_match.group(1)
-            name_part = seq_match.group(2).strip()
-        else:
-            num_only = re.search(r'\d+', name_without_ext)
-            if num_only:
-                sequence = num_only.group(0)
+        # 3. Check for camera clip prefix like '001 01-Q', '002 16-Q', 'C0001_01-Q', 'CAM1_01-Q', '01_01-Q'
+        m_cam = re.match(r'^(?:[a-zA-Z]{0,4}\d{2,5})[\s_\-]+(\d+[a-zA-Z]?[\s_\-]+[a-zA-Z0-9]+(?:[\s_\-].*)?)$', clean)
+        if m_cam:
+            clean = m_cam.group(1).strip()
 
-        pfx_match = re.match(r'^([A-Za-z]+)', name_part)
-        if pfx_match:
-            prefix = pfx_match.group(1).upper()
+        # 4. Extract sequence number (e.g. '01', '16', '17', '01a') and code part (e.g. 'Q', 'MZ', 'Z', 'BZ', 'BQ', 'BM', 'M', 'KG', 'N', 'Reception')
+        m_seq = re.match(r'^(\d+[a-zA-Z]?)(?:[\s_\-]+([a-zA-Z0-9]+))?', clean)
+        sequence = m_seq.group(1) if m_seq else ""
+        code_part = m_seq.group(2) if (m_seq and m_seq.group(2)) else ""
+
+        # Normalize sequence numbers (e.g., '1' -> '01', '01' -> '01')
+        norm_seq = f"{int(sequence):02d}" if sequence.isdigit() else sequence.lower()
+        norm_code = code_part.lower()
+        token = f"{norm_seq}-{norm_code}" if (norm_seq and norm_code) else (norm_seq or clean.lower())
+
+        prefix = code_part.upper() if code_part else ""
 
         return {
             "raw": raw_name,
-            "cleanName": name_without_ext,
-            "sequence": sequence,
-            "namePart": name_part,
-            "prefix": prefix
+            "cleanName": clean,
+            "sequence": norm_seq,
+            "namePart": code_part or clean,
+            "prefix": prefix,
+            "code": norm_code,
+            "token": token
         }
 
     @staticmethod
     def get_shot_code(raw_name: str) -> str:
-        ext = os.path.splitext(raw_name)[1]
-        name_without_ext = os.path.splitext(raw_name)[0].strip() if ext else raw_name.strip()
-        leading_seq_match = re.match(r'^(\d+)[\s_\-]+([A-Za-z0-9].*)$', name_without_ext)
-        core_name = name_without_ext
-        if leading_seq_match and leading_seq_match.group(2):
-            core_name = leading_seq_match.group(2).strip()
-        return re.sub(r'[\s_\-]+', ' ', core_name.lower()).strip()
+        parsed = VideoTransferEngineWrapper.parse_sequence_name(raw_name)
+        return parsed["token"]
+
+    @staticmethod
+    def is_match_pair(vid_parsed: dict, pf_parsed: dict) -> bool:
+        v_seq = vid_parsed.get("sequence", "")
+        p_seq = pf_parsed.get("sequence", "")
+        v_code = vid_parsed.get("code", "")
+        p_code = pf_parsed.get("code", "")
+        v_tok = vid_parsed.get("token", "")
+        p_tok = pf_parsed.get("token", "")
+        v_clean = vid_parsed.get("cleanName", "").lower()
+        p_clean = pf_parsed.get("cleanName", "").lower()
+
+        # CRITICAL RULE: If BOTH have sequence numbers and they do NOT match, REJECT!
+        if v_seq and p_seq and v_seq != p_seq:
+            return False
+
+        # 1. Exact clean name match
+        if v_clean and p_clean and v_clean == p_clean:
+            return True
+
+        # 2. Token match (e.g. '01-q' == '01-q', '16-q' == '16-q', '02-mz' == '02-mz')
+        if v_tok and p_tok and v_tok == p_tok:
+            return True
+
+        # 3. Matching sequence + matching code
+        if v_seq and p_seq and v_seq == p_seq:
+            if v_code and p_code and v_code == p_code:
+                return True
+            if not v_code or not p_code:
+                return True
+
+        # 4. Normalized key match when neither has conflicting sequence
+        v_norm = re.sub(r'[\s_\-]+', ' ', v_clean).strip()
+        p_norm = re.sub(r'[\s_\-]+', ' ', p_clean).strip()
+        if v_norm and p_norm and v_norm == p_norm:
+            return True
+
+        return False
 
     @staticmethod
     def strip_video_suffix(raw_name: str) -> str:
@@ -603,15 +712,8 @@ class VideoTransferEngineWrapper(QObject):
 
     @staticmethod
     def extract_item_code(raw_name: str) -> str:
-        ext = os.path.splitext(raw_name)[1]
-        name = os.path.splitext(raw_name)[0] if ext else raw_name
-        name = re.sub(r'[-_](?:its|v|p)+(?:[-_]v|[-_]p)?$', '', name, flags=re.I)
-        name = re.sub(r'_\d{1,3}[A-Za-z](?:-|_|\s|$)', '', name, flags=re.I)
-        name = re.sub(r'^\d{4}-\d{2}-\d{2}\s*', '', name)
-        item_match = re.search(r'([0-9]{0,3}[A-Za-z]{1,4})(?:[-_]|$)', name)
-        if item_match and item_match.group(1):
-            return item_match.group(1).lower().strip()
-        return re.sub(r'[\s_\-]+', '', name.lower()).strip()
+        parsed = VideoTransferEngineWrapper.parse_sequence_name(raw_name)
+        return parsed["token"]
 
     @classmethod
     def find_video_thumbnail(cls, video_path: str):
@@ -879,11 +981,6 @@ class VideoTransferEngineWrapper(QObject):
                 unmatched = []
     
                 for vid in all_discovered_videos:
-                    vid_stem_clean = self.strip_video_suffix(vid["fileName"])
-                    vid_norm_key = self.normalize_key(vid_stem_clean)
-                    vid_item_code = self.extract_item_code(vid["fileName"])
-                    vid_shot_code = self.get_shot_code(vid_stem_clean)
-    
                     pf_match = None
                     for pf in all_photo_subfolders:
                         if pf["paired"]:
@@ -892,17 +989,7 @@ class VideoTransferEngineWrapper(QObject):
                             if self.normalize_key(vid["dateFolderName"]) != self.normalize_key(pf["dateFolderName"]):
                                 continue
     
-                        pf_stem_clean = self.strip_video_suffix(pf["name"])
-                        pf_norm_key = self.normalize_key(pf_stem_clean)
-                        pf_item_code = self.extract_item_code(pf["name"])
-                        pf_shot_code = self.get_shot_code(pf_stem_clean)
-    
-                        if (
-                            vid_stem_clean.lower() == pf_stem_clean.lower() or
-                            vid_norm_key == pf_norm_key or
-                            vid_item_code == pf_item_code or
-                            (vid_shot_code == pf_shot_code and len(vid_shot_code) > 0)
-                        ):
+                        if self.is_match_pair(vid["parsed"], pf["parsed"]):
                             pf_match = pf
                             break
     
@@ -1319,8 +1406,15 @@ class VideoTransferEngineWrapper(QObject):
                     transferred_files.append({
                         "videoName": v_name,
                         "photoFolderName": p_name,
+                        "dateFolderName": item.get("dateFolderName", ""),
+                        "sequence": item.get("sequence", ""),
+                        "sourceVideoPath": v_path,
                         "targetPath": target_file_path,
-                        "thumbnailTargetPath": target_video_thumb_path or target_photo_thumb_path
+                        "sourceVideoThumbPath": v_thumb_path or "",
+                        "thumbnailTargetPath": target_video_thumb_path or "",
+                        "sourcePhotoThumbPath": p_thumb_path or "",
+                        "photoThumbnailTargetPath": target_photo_thumb_path or "",
+                        "transferMode": transfer_mode
                     })
 
                     elapsed_sec = time.time() - start_time
@@ -1334,8 +1428,9 @@ class VideoTransferEngineWrapper(QObject):
                 duration_sec = time.time() - start_time
                 avg_speed_mbps = (total_bytes_copied / duration_sec) / (1024 * 1024) if duration_sec > 0 else 0
 
-                # Automatically export CSV report to Document folder in target directory without prompting
+                # Automatically export styled Excel (.xlsx) undo manifest and CSV report to Document folder
                 auto_csv_path = None
+                auto_xlsx_path = None
                 try:
                     target_paths = [t.get("targetPath") for t in transferred_files if t.get("targetPath")]
                     if target_paths:
@@ -1348,6 +1443,134 @@ class VideoTransferEngineWrapper(QObject):
                         os.makedirs(doc_dir, exist_ok=True)
 
                         timestamp_str = time.strftime("%Y%m%d_%H%M%S")
+                        date_display = time.strftime("%Y-%m-%d %H:%M:%S")
+
+                        # 1. Generate Excel (.xlsx) Workbook using openpyxl
+                        try:
+                            import openpyxl
+                            from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+                            wb = openpyxl.Workbook()
+                            ws = wb.active
+                            ws.title = "Transfer & Undo Manifest"
+
+                            # Title Header
+                            ws.merge_cells("A1:M1")
+                            ws["A1"] = "SEQUORA Studio — Video Transfer & Undo Manifest"
+                            ws["A1"].font = Font(name="Segoe UI", size=14, bold=True, color="FFFFFF")
+                            ws["A1"].fill = PatternFill(start_color="1F4E79", end_color="1F4E79", fill_type="solid")
+                            ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
+                            ws.row_dimensions[1].height = 30
+
+                            # Metadata Summary Rows
+                            meta_fill = PatternFill(start_color="F2F4F7", end_color="F2F4F7", fill_type="solid")
+                            meta_font = Font(name="Segoe UI", size=10, bold=True, color="333333")
+                            val_font = Font(name="Segoe UI", size=10, color="222222")
+
+                            ws["A2"] = "Export Timestamp:"
+                            ws["A2"].font = meta_font
+                            ws["A2"].fill = meta_fill
+                            ws["B2"] = date_display
+                            ws["B2"].font = val_font
+
+                            ws["D2"] = "Total Clips:"
+                            ws["D2"].font = meta_font
+                            ws["D2"].fill = meta_fill
+                            ws["E2"] = len(transferred_files)
+                            ws["E2"].font = val_font
+
+                            ws["G2"] = "Transfer Mode:"
+                            ws["G2"].font = meta_font
+                            ws["G2"].fill = meta_fill
+                            ws["H2"] = transfer_mode.upper()
+                            ws["H2"].font = val_font
+
+                            ws["J2"] = "Target Document Folder:"
+                            ws["J2"].font = meta_font
+                            ws["J2"].fill = meta_fill
+                            ws["K2"] = doc_dir
+                            ws["K2"].font = val_font
+
+                            # Table Headers
+                            headers = [
+                                "SR NO",
+                                "DATE FOLDER",
+                                "SEQUENCE",
+                                "VIDEO FILENAME",
+                                "SOURCE VIDEO PATH",
+                                "TARGET PHOTO FOLDER",
+                                "TARGET VIDEO PATH",
+                                "SOURCE VIDEO THUMB",
+                                "TARGET VIDEO THUMB",
+                                "SOURCE PHOTO THUMB",
+                                "TARGET PHOTO THUMB",
+                                "TRANSFER MODE",
+                                "STATUS"
+                            ]
+
+                            hdr_fill = PatternFill(start_color="2F5597", end_color="2F5597", fill_type="solid")
+                            hdr_font = Font(name="Segoe UI", size=10, bold=True, color="FFFFFF")
+                            thin_side = Side(style="thin", color="D9D9D9")
+                            table_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+                            ws.row_dimensions[4].height = 24
+                            for col_idx, hdr in enumerate(headers, 1):
+                                cell = ws.cell(row=4, column=col_idx, value=hdr)
+                                cell.font = hdr_font
+                                cell.fill = hdr_fill
+                                cell.alignment = Alignment(horizontal="center", vertical="center")
+                                cell.border = table_border
+
+                            # Data Rows
+                            zebra_fill = PatternFill(start_color="F9FAFB", end_color="F9FAFB", fill_type="solid")
+                            for row_idx, tf in enumerate(transferred_files, 5):
+                                row_data = [
+                                    row_idx - 4,
+                                    tf.get("dateFolderName", ""),
+                                    tf.get("sequence", ""),
+                                    tf.get("videoName", ""),
+                                    tf.get("sourceVideoPath", ""),
+                                    tf.get("photoFolderName", ""),
+                                    tf.get("targetPath", ""),
+                                    tf.get("sourceVideoThumbPath", ""),
+                                    tf.get("thumbnailTargetPath", ""),
+                                    tf.get("sourcePhotoThumbPath", ""),
+                                    tf.get("photoThumbnailTargetPath", ""),
+                                    transfer_mode.upper(),
+                                    "SUCCESS"
+                                ]
+                                ws.row_dimensions[row_idx].height = 20
+                                is_even = (row_idx % 2 == 0)
+                                for col_idx, val in enumerate(row_data, 1):
+                                    cell = ws.cell(row=row_idx, column=col_idx, value=val)
+                                    cell.font = Font(name="Segoe UI", size=9, color="222222")
+                                    if is_even:
+                                        cell.fill = zebra_fill
+                                    cell.border = table_border
+                                    if col_idx in (1, 3, 12, 13):
+                                        cell.alignment = Alignment(horizontal="center", vertical="center")
+                                    else:
+                                        cell.alignment = Alignment(horizontal="left", vertical="center")
+
+                            # Auto adjust column widths
+                            for col in ws.columns:
+                                col_letter = openpyxl.utils.get_column_letter(col[0].column)
+                                max_len = 0
+                                for cell in col:
+                                    if cell.row == 1:
+                                        continue
+                                    val_str = str(cell.value or "")
+                                    if len(val_str) > max_len:
+                                        max_len = len(val_str)
+                                ws.column_dimensions[col_letter].width = max(12, min(max_len + 3, 50))
+
+                            xlsx_filename = f"Video_Transfer_Undo_Manifest_{timestamp_str}.xlsx"
+                            auto_xlsx_path = os.path.join(doc_dir, xlsx_filename)
+                            wb.save(auto_xlsx_path)
+                        except Exception as ex_wb:
+                            print(f"Excel export notice: {ex_wb}")
+
+                        # 2. Generate CSV Fallback
                         csv_filename = f"Video_Transfer_Report_{timestamp_str}.csv"
                         auto_csv_path = os.path.join(doc_dir, csv_filename)
 
@@ -1355,12 +1578,16 @@ class VideoTransferEngineWrapper(QObject):
                             writer = csv.writer(f_csv)
                             writer.writerow([
                                 "SR NO",
+                                "DATE FOLDER",
                                 "SEQUENCE",
                                 "VIDEO NAME",
+                                "SOURCE VIDEO PATH",
                                 "TARGET PHOTO FOLDER",
-                                "DATE FOLDER",
-                                "TARGET FILE PATH",
-                                "THUMBNAIL TARGET PATH",
+                                "TARGET VIDEO PATH",
+                                "SOURCE VIDEO THUMB",
+                                "TARGET VIDEO THUMB",
+                                "SOURCE PHOTO THUMB",
+                                "TARGET PHOTO THUMB",
                                 "TRANSFER MODE",
                                 "STATUS",
                                 "TIMESTAMP"
@@ -1368,18 +1595,22 @@ class VideoTransferEngineWrapper(QObject):
                             for idx, tf in enumerate(transferred_files, 1):
                                 writer.writerow([
                                     idx,
+                                    tf.get("dateFolderName", ""),
                                     tf.get("sequence", ""),
                                     tf.get("videoName", ""),
+                                    tf.get("sourceVideoPath", ""),
                                     tf.get("photoFolderName", ""),
-                                    tf.get("dateFolderName", ""),
                                     tf.get("targetPath", ""),
+                                    tf.get("sourceVideoThumbPath", ""),
                                     tf.get("thumbnailTargetPath", ""),
+                                    tf.get("sourcePhotoThumbPath", ""),
+                                    tf.get("photoThumbnailTargetPath", ""),
                                     transfer_mode.upper(),
                                     "SUCCESS",
-                                    time.strftime("%Y-%m-%d %H:%M:%S")
+                                    date_display
                                 ])
                 except Exception as exp:
-                    print(f"Auto-export CSV notice: {exp}")
+                    print(f"Auto-export manifest notice: {exp}")
 
                 report_summary = {
                     "success": True,
@@ -1392,7 +1623,8 @@ class VideoTransferEngineWrapper(QObject):
                     "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                     "transferredFiles": transferred_files,
                     "errors": errors,
-                    "autoExportedCsvPath": auto_csv_path or ""
+                    "autoExportedCsvPath": auto_csv_path or "",
+                    "autoExportedXlsxPath": auto_xlsx_path or ""
                 }
 
                 self._transferPercent = 100
@@ -1423,20 +1655,28 @@ class VideoTransferEngineWrapper(QObject):
         try:
             for item in transferred_files:
                 target_path = item.get("targetPath", "")
+                source_path = item.get("sourceVideoPath", "") or item.get("sourcePath", "")
                 thumb_target_path = item.get("thumbnailTargetPath", "")
+                mode = (item.get("transferMode") or "COPY").upper()
 
                 if target_path and os.path.exists(target_path):
                     try:
-                        os.remove(target_path)
-                        undone_count += 1
+                        if mode == "MOVE" and source_path:
+                            # Revert by moving file BACK to source directory
+                            os.makedirs(os.path.dirname(source_path), exist_ok=True)
+                            shutil.move(target_path, source_path)
+                            undone_count += 1
+                        else:
+                            os.remove(target_path)
+                            undone_count += 1
                     except Exception as err:
-                        errors.append(f"Failed to delete {target_path}: {str(err)}")
+                        errors.append(f"Failed to revert {target_path}: {str(err)}")
 
                 if thumb_target_path and os.path.exists(thumb_target_path):
                     try:
                         os.remove(thumb_target_path)
                     except Exception as err:
-                        errors.append(f"Failed to delete thumbnail {thumb_target_path}: {str(err)}")
+                        errors.append(f"Failed to clean thumbnail {thumb_target_path}: {str(err)}")
 
             self.undoCompleted.emit(undone_count, len(errors))
         except Exception as e:
